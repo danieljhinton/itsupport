@@ -1,5 +1,6 @@
 import type { ToolPolicy } from "../agent/policy.js";
 import { callHaloTool } from "./mcp.js";
+import { searchUsersRest } from "./rest.js";
 
 export type IdentifyResult =
   | { status: "matched"; user: Record<string, unknown> }
@@ -50,10 +51,10 @@ export function phoneVariants(raw: string): string[] {
   return [...out];
 }
 
-/** Phone-like values on a Halo user record. */
+/** Phone-like values on a Halo user record (the user's own, not their site's switchboard). */
 function userPhones(u: Record<string, unknown>): string[] {
   return Object.entries(u)
-    .filter(([k, v]) => /phone|mobile|tel/i.test(k) && typeof v === "string" && v.trim())
+    .filter(([k, v]) => /phone|mobile|tel/i.test(k) && !/^site/i.test(k) && typeof v === "string" && v.trim())
     .map(([, v]) => v as string);
 }
 
@@ -102,11 +103,38 @@ export async function identifyCaller(from: string | undefined, policy: ToolPolic
       if (seen.size > 0) break;
     }
     const users = [...seen.values()];
-    if (users.length === 1) return { status: "matched", user: users[0] };
+    if (users.length === 1) return { status: "matched", user: await withContact(users[0], target) };
     if (users.length > 1) return { status: "ambiguous", candidates: users.slice(0, 5) };
     return { status: "none" };
   } catch (err) {
     return { status: "error", detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Name and email of a Halo user record, whatever the tool called the fields. */
+export function contactOf(u: Record<string, unknown>): { name?: string; email?: string } {
+  const pick = (re: RegExp) => {
+    const hit = Object.entries(u).find(([k, v]) => re.test(k) && typeof v === "string" && v.trim());
+    return hit ? (hit[1] as string) : undefined;
+  };
+  return { name: pick(/^(name|user|full_?name)$/i), email: pick(/^(email|emailaddress|email_address)$/i) };
+}
+
+/**
+ * Some lookup tools (e.g. CF_retrieve_users) return only name and phone. Fill in the email
+ * and Halo user id from the REST API, keeping only a record whose own phone is the caller's.
+ * Best effort: on any failure the match is returned unchanged and the agent asks for the email.
+ */
+async function withContact(u: Record<string, unknown>, target: string): Promise<Record<string, unknown>> {
+  const { name, email } = contactOf(u);
+  if (email || !name) return u;
+  try {
+    const hits = (await searchUsersRest(name)).filter((r) => userPhones(r).some((p) => toE164(p) === target));
+    if (hits.length !== 1) return u;
+    const extra = contactOf(hits[0]);
+    return { ...u, ...(hits[0].id !== undefined ? { user_id: hits[0].id } : {}), ...(extra.email ? { email: extra.email } : {}) };
+  } catch {
+    return u;
   }
 }
 
@@ -115,7 +143,12 @@ export function identifyNote(from: string | undefined, r: IdentifyResult): strin
   const caller = from ? `Caller ID: ${from}.` : "Caller ID: withheld.";
   switch (r.status) {
     case "matched":
-      return `${caller} Automatic Halo lookup matched one user: ${JSON.stringify(r.user)}. Confirm with the caller before sharing details.`;
+      return (
+        `${caller} Automatic Halo lookup matched one user: ${JSON.stringify(r.user)}. Confirm with the caller before sharing details.` +
+        (contactOf(r.user).email
+          ? ` Once confirmed, use this email for tickets and searches; don't ask the caller for it.`
+          : ` Halo has no email for them, so ask for their work email before logging a ticket.`)
+      );
     case "ambiguous":
       return `${caller} Automatic Halo lookup matched several users, so ask for name and email to confirm: ${JSON.stringify(r.candidates)}.`;
     case "none":

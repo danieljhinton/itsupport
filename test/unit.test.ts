@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { classifyTool, collectTicketIds, type ToolPolicy } from "../src/agent/policy.js";
 import { buildAgentTools, compactResult } from "../src/agent/tools.js";
 import { echoContent, noteAllowed } from "../src/agent/session.js";
-import { extractUsers, phoneVariants, toE164 } from "../src/halo/identify.js";
+import { contactOf, extractUsers, phoneVariants, toE164 } from "../src/halo/identify.js";
 import { parseRelayMessage } from "../src/twilio/relay.js";
 import { signCallSid, verifyCallSid } from "../src/twilio/twiml.js";
 import policyFile from "../config/tool-policy.json" with { type: "json" };
@@ -132,6 +132,11 @@ describe("caller identification helpers", () => {
       "+61412345678", "+61 412 345 678", "0412 345 678", "0412345678", "345 678",
     ]);
     expect(phoneVariants("")).toEqual([]);
+  });
+
+  it("reads name and email from MCP and REST user shapes", () => {
+    expect(contactOf({ User: "Brenda Ross", "Phone Number": "+61 3 9561 7232" })).toEqual({ name: "Brenda Ross", email: undefined });
+    expect(contactOf({ name: "Brenda Ross", emailaddress: "b@x.com" })).toEqual({ name: "Brenda Ross", email: "b@x.com" });
   });
 
   it("extracts users from common result shapes", () => {

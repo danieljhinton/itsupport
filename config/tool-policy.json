@@ -31,7 +31,7 @@
     "args": {}
   },
   "promptNotes": [
-    "The automatic caller lookup only gives a name. Always ask for the caller's work email address before logging a ticket, and use it as user_email.",
+    "Use the email from the caller lookup as user_email. Only ask the caller for their email if the lookup didn't provide one.",
     "Ticket search here is unreliable and often finds nothing. Ask the caller for the ticket number if they have one and use CF_get_one_ticket. Otherwise try CF_search_tickets with a few words describing the issue and open_only set to true. Only discuss or add notes to a ticket whose user_name matches the caller.",
     "Assets in this Halo instance are not linked to users. To find the caller's device, ask for the asset tag on the sticker (for example ABC00001) or the model, then use CF_search_assets with that as the search term. Pass its id as asset_id when logging a ticket.",
     "Search the knowledge base with CF_search_knowledge_base using a few key words from the symptoms. The results include the resolution steps; use CF_get_one_article only if you need more.",

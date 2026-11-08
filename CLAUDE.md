@@ -27,7 +27,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - `src/server.ts`: Fastify routes `/twiml`, `/relay` (ws), `/dashboard`, `/events` (SSE), `/token` (Voice SDK access token), `/vendor/twilio-voice.min.js`, `/health`
 - `src/twilio/`: TwiML builder + ConversationRelay websocket handler
 - `src/agent/`: `session.ts` (streaming tool loop, interrupts), `prompt.ts`, `tools.ts` (policy + MCP→Claude tool mapping)
-- `src/halo/`: `auth.ts` (token cache), `mcp.ts` (MCP client), `identify.ts` (caller lookup)
+- `src/halo/`: `auth.ts` (token cache), `mcp.ts` (MCP client), `identify.ts` (caller lookup), `rest.ts` (REST user search, for the caller's email only)
 - `src/events/bus.ts`: per-call events for the dashboard
 - `public/dashboard.html`: live demo dashboard
 - `scripts/`: `list-halo-tools.ts`, `chat-cli.ts` (text REPL, no phone needed), `setup-twilio.ts`
@@ -46,7 +46,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - [x] Agent session + prompt + tools; chat CLI, run end to end on Haiku 5.5 (KB question answered from CF_search_knowledge_base)
 - [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
-- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 17 passing)
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 18 passing)
 
 ### Environment (user's setup, 2026-11-08)
 - Halo (QA instance): `https://dhinternalitsm.itsm.haloqa.co.uk`, auth at `/auth`. Client-credentials auth works. **MCP endpoint (since 2026-11-08): a Halo Virtual Agent, `/api/VirtualAgent/04b2437f-0519-4c8a-8f41-a2a3bbbcb5db/mcp`** (was the generic `/api/mcp`, 22 tools).
@@ -57,7 +57,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 ### Halo MCP findings (Virtual Agent endpoint, 12 `CF_` tools)
 - Annotations: `CF_add_note`, `CF_close_ticket` destructive; `CF_log_incident`, `CF_search_services` not read-only; the rest `readOnlyHint`.
 - Policy: `CF_log_incident` = create_ticket; `CF_add_note` = add_note with `status`/`time_taken` omitted (its `status` enum could change any ticket's status, incl. Closed); `CF_close_ticket` = close_ticket (created-on-this-call only), so "resolved on call" tickets are now really closed; `CF_search_services` = read; `CF_retrieve_users` denied to the agent.
-- `CF_retrieve_users` (no args) returns **every** active user as `[{User, "Phone Number"}]`: name + spaced phone only, **no id or email**. `identify.ts` calls it once and matches on normalised E.164; the agent must ask for the caller's email before logging (`CF_log_incident` needs `user_email`).
+- `CF_retrieve_users` (no args) returns **every** active user as `[{User, "Phone Number"}]`: name + spaced phone only, **no id or email**. `identify.ts` calls it once and matches on normalised E.164, then fills in `email` + `user_id` from the Halo **REST API** (`src/halo/rest.ts`, `GET /api/Users?search=<name>`, same client-credentials token; kept only if that record's own phone matches, `site*` phone fields ignored). The user asked (2026-11-08) that the agent **not** ask for the email when the lookup has it; it asks only if the REST step finds none.
 - `CF_search_tickets` is a vectorised search and found **nothing** for name, keyword or ticket number (blank search → "Failed to vectorise"). Possibly the index isn't built, or it's scoped to the API account. Agent asks for the ticket number and uses `CF_get_one_ticket` (works: returns `user_name`, `conversation`, `similar_tickets`, `actions`).
 - The add_note guard only takes a ticket tool's own top-level `id` (or items of a top-level `results` list), so `similar_tickets`/`actions` ids from `CF_get_one_ticket` don't become noteable.
 - `CF_log_incident` requires `CFimpact`, `CFurgency`, `category_1` (enums); optional `asset_id`. Its result shape is **untested** (no live ticket created yet); `recordTicket` falls back to the first 2+ digit number in the text, and a wrong ID only makes close/note fail safely.
