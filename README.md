@@ -90,9 +90,10 @@ Australian numbers need an approved **Regulatory Bundle**. Start this early, bec
 ## 5. Run it
 
 ```bash
-ngrok http 3000                # copy the https URL into PUBLIC_URL in .env (and the TwiML App's Voice URL)
-npm run dev                    # start the server
-npm run setup:twilio           # only once you have the AU number: points its webhook at PUBLIC_URL/twiml
+npm run dev                    # terminal 1: the server (port 3000)
+ngrok http 3000 --url=<your-domain>   # terminal 2 (older ngrok: --domain=); its https URL is PUBLIC_URL in .env
+npm run check:twilio           # optional: every line should say OK
+npm run setup:twilio           # once per number (or when PUBLIC_URL changes): points its webhook at PUBLIC_URL/twiml
 ```
 
 Open **http://localhost:3000/dashboard**, then click **Call the agent** or ring the number.
@@ -103,10 +104,12 @@ If you expose the dashboard through ngrok, set `DASHBOARD_TOKEN` and open `/dash
 
 | Scenario | What to say | What the dashboard shows |
 |---|---|---|
-| Fixed on the call | "Outlook keeps asking for my password" | user lookup → tickets + assets in parallel → KB search → **closed ticket logged** |
-| Needs a technician | "My laptop screen is cracked" | asset lookup → **open ticket** with asset, impact and steps tried → ticket number read back |
-| Existing ticket | "I'm chasing my VPN ticket, it's still broken" | open tickets → **note added** to the existing ticket, no duplicate |
-| Unknown number | call from a number not in Halo | agent asks for name and email → user search |
+| Fixed on the call | "Outlook keeps asking for my password" | caller matched by phone → KB search → ticket logged, then **closed** |
+| Needs a technician | "My laptop screen is cracked" (asset tag e.g. ABC00008) | asset search → **open ticket** with asset, impact, urgency and category → ticket number read back |
+| Existing ticket | "I'm chasing ticket 3143, the VPN is still broken" | ticket looked up by number → **note added** to it, no duplicate |
+| Unknown number | call from a number not in Halo | agent asks for name and email |
+
+Every call starts with the agent's greeting (`WELCOME_GREETING`). A matched caller's email comes from the lookup, so the agent doesn't ask for it.
 
 You can interrupt the agent at any point; it stops talking and listens.
 

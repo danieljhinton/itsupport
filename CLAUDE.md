@@ -10,11 +10,12 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - **Voice:** Twilio **ConversationRelay**. Twilio does STT and TTS; our server exchanges text over a websocket at `/relay`. Language `en-AU`.
 - **LLM:** Claude via the Anthropic API. Model comes from env `CLAUDE_MODEL` (default `claude-opus-5-5`, effort `low` for latency). Thinking can't be disabled on Opus 5.5; effort is the latency control. Server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) is sent only for models that support it (`fallbackParams()` in `session.ts`); Haiku 5.5 has none. **User switched `.env` to `CLAUDE_MODEL=claude-haiku-5-5` (2026-11-08)** for speed/cost; first token ~1.3 s, ~4 s with two KB searches.
 - **Halo MCP:** hosted Halo MCP endpoint, authenticated with Halo **API client credentials** (OAuth `client_credentials`). The app is the MCP client (client-side MCP, *not* Anthropic's MCP connector), so it can enforce the tool allowlist, send calls to the dashboard and trim results.
-- **Caller identification:** caller ID lookup in Halo first; if there's no match or more than one, the agent asks for name/email.
+- **Caller identification:** caller ID lookup in Halo first; if there's no match or more than one, the agent asks for name/email. A matched caller's email comes from the lookup and the agent must **not** ask for it (user request).
+- **Greeting (user request, 2026-11-08):** the agent speaks first: `WELCOME_GREETING` ("Hello, thanks for contacting the IT support desk. I'm the virtual assistant. How can I help you today?"). Twilio plays it as ConversationRelay `welcomeGreeting`; `CallSession({ greeting })` adds it to the dashboard transcript and tells the model it was already said (no double greeting). The chat CLI prints it first.
 - **Halo write policy:** the agent may (1) create tickets: open if unresolved, closed if resolved on the call (for reporting); (2) add notes to the caller's existing tickets. **No other writes.** Enforced in code by `config/tool-policy.json` plus `src/agent/tools.ts` / `session.ts`: policy kinds `create_ticket`, `add_note` (tickets seen on this call), `close_ticket` (only tickets *created* on this call), and `omitArgs` (hidden + stripped args, e.g. `status` on a note tool). Read-only tools are allowed when the MCP tool is annotated `readOnlyHint` or listed as `read`.
 - **Hosting:** local + ngrok for demos, with a Dockerfile for later.
-- **Twilio:** account exists, **AU number not bought yet** (it needs an approved Australian Regulatory Bundle, which can take days).
-- **Interim calling (decided 2026-11-08):** use **browser calling** with the Twilio Voice JS SDK from the dashboard ("Call the agent" button) until the AU number arrives. It goes through a TwiML App → the same `/twiml` → ConversationRelay path. Browser calls have no caller ID, so the dashboard sends a demo number (`demoFrom` → TwiML `<Parameter name="callerNumber">` → `setup.customParameters.callerNumber`). `callerNumberFor()` honours it **only** for `client:` callers.
+- **Twilio:** AU number **bought and compliance-approved (2026-11-08)**, in `.env` as `TWILIO_PHONE_NUMBER` (ends …739). `npm run setup:twilio` done: its voice webhook is `${PUBLIC_URL}/twiml` (POST). Real calls work end to end.
+- **Browser calling** (the interim option before the number arrived; still available): the dashboard's "Call the agent" button calls from the browser with the Twilio Voice JS SDK. It goes through a TwiML App → the same `/twiml` → ConversationRelay path. Browser calls have no caller ID, so the dashboard sends a demo number (`demoFrom` → TwiML `<Parameter name="callerNumber">` → `setup.customParameters.callerNumber`). `callerNumberFor()` honours it **only** for `client:` callers.
 
 ## Conventions
 - **Commit and push to GitHub (`origin` = github.com/danieljhinton/itsupport, branch `main`) after each meaningful milestone.** The user asked for this.
@@ -43,7 +44,8 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 ## Status / open items
 - [x] Plan approved; scaffold + config
 - [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** and tested live (now the Virtual Agent endpoint, 12 `CF_` tools)
-- [x] Agent session + prompt + tools; chat CLI, run end to end on Haiku 5.5 (KB question answered from CF_search_knowledge_base)
+- [x] Agent session + prompt + tools; chat CLI, run end to end on Haiku 5.5. User ran the demo scenarios (incl. ticket logging) and reports it works well
+- [x] Real phone calls to the AU number through ngrok (user confirmed 2026-11-08)
 - [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
 - [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 18 passing)
@@ -60,16 +62,21 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - `CF_retrieve_users` (no args) returns **every** active user as `[{User, "Phone Number", Email}]` (the user added `Email` to the tool on 2026-11-08; no id). `identify.ts` calls it once and matches on normalised E.164 (`site*` phone fields ignored). The user asked that the agent **not** ask for the email when the lookup has it; it asks only if the match has no email. Kept MCP-only on purpose (a REST fallback was tried and removed).
 - `CF_search_tickets` is a vectorised search and found **nothing** for name, keyword or ticket number (blank search → "Failed to vectorise"). Possibly the index isn't built, or it's scoped to the API account. Agent asks for the ticket number and uses `CF_get_one_ticket` (works: returns `user_name`, `conversation`, `similar_tickets`, `actions`).
 - The add_note guard only takes a ticket tool's own top-level `id` (or items of a top-level `results` list), so `similar_tickets`/`actions` ids from `CF_get_one_ticket` don't become noteable.
-- `CF_log_incident` requires `CFimpact`, `CFurgency`, `category_1` (enums); optional `asset_id`. Its result shape is **untested** (no live ticket created yet); `recordTicket` falls back to the first 2+ digit number in the text, and a wrong ID only makes close/note fail safely.
+- `CF_log_incident` requires `CFimpact`, `CFurgency`, `category_1` (enums); optional `asset_id`. The user has logged tickets through it successfully, but Claude hasn't inspected its result shape; `recordTicket` falls back to the first 2+ digit number in the text, and a wrong ID only makes close/note fail safely.
 - `CF_search_assets` works (results `{page_no,..., results:[{id, asset_tag, asset_type, ...}]}`); assets still not linked to users. KB search returns resolution text inline.
 - Results are often plain text when empty ("No tickets found.") rather than JSON.
 - Instance-specific guidance lives in `config/tool-policy.json › promptNotes`.
 
-### Next steps
-1. ~~User adds `ANTHROPIC_API_KEY`~~ (done).
-2. `npm run chat -- --from +61395617232` through the README demo scenarios; tune `src/agent/prompt.ts` / `promptNotes`.
-3. Browser call from the dashboard (latency, barge-in).
-4. Later: AU Regulatory Bundle → buy number → `npm run setup:twilio`. No code changes needed.
+### Starting a demo (user's machine)
+1. Terminal 1: `npm run dev` (port 3000). If it fails with `EADDRINUSE`, an old server is still running: stop it (Ctrl+C in its terminal, or `Stop-Process` on the node PIDs). Claude's auto mode isn't allowed to kill processes, so the user does this.
+2. Terminal 2: `ngrok http 3000 --domain=mutiny-seldom-produce.ngrok-free.dev`. A failed call usually means ngrok isn't running (`npm run check:twilio` reports "ngrok endpoint is offline").
+3. Dashboard: `https://mutiny-seldom-produce.ngrok-free.dev/dashboard` (add `?token=` if `DASHBOARD_TOKEN` is set). Ring the number, or use "Call the agent".
+- Calls from the user's own mobile only match a Halo user if that number is on a Halo user returned by `CF_retrieve_users`.
+
+### Next steps / ideas
+- Tune `src/agent/prompt.ts` / `promptNotes` from real calls (latency, barge-in).
+- `CF_search_tickets` finds nothing on this instance; revisit if Halo's ticket search index gets built (then the agent could find tickets without a number).
+- Optionally try `claude-sonnet-5-5` if Haiku struggles on multi-step calls.
 
 ### Known limitations / ideas
 - The end-of-call hang-up waits an estimated TTS duration (~70 ms/char) before sending `{type:"end"}`.
