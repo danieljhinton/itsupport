@@ -11,7 +11,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - **LLM:** Claude via the Anthropic API. Model comes from env `CLAUDE_MODEL` (default `claude-opus-5-5`, effort `low` for latency). Thinking can't be disabled on Opus 5.5; effort is the latency control. Server-side refusal fallback is on (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`).
 - **Halo MCP:** hosted Halo MCP endpoint, authenticated with Halo **API client credentials** (OAuth `client_credentials`). The app is the MCP client (client-side MCP, *not* Anthropic's MCP connector), so it can enforce the tool allowlist, send calls to the dashboard and trim results.
 - **Caller identification:** caller ID lookup in Halo first; if there's no match or more than one, the agent asks for name/email.
-- **Halo write policy:** the agent may (1) create tickets: open if unresolved, closed if resolved on the call (for reporting); (2) add notes to the caller's existing tickets. **No other writes.** Enforced in code by `config/tool-policy.json` plus `src/agent/tools.ts`. Read-only tools are allowed when the MCP tool is annotated `readOnlyHint` or listed as `read`.
+- **Halo write policy:** the agent may (1) create tickets: open if unresolved, closed if resolved on the call (for reporting); (2) add notes to the caller's existing tickets. **No other writes.** Enforced in code by `config/tool-policy.json` plus `src/agent/tools.ts` / `session.ts`: policy kinds `create_ticket`, `add_note` (tickets seen on this call), `close_ticket` (only tickets *created* on this call), and `omitArgs` (hidden + stripped args, e.g. `status` on a note tool). Read-only tools are allowed when the MCP tool is annotated `readOnlyHint` or listed as `read`.
 - **Hosting:** local + ngrok for demos, with a Dockerfile for later.
 - **Twilio:** account exists, **AU number not bought yet** (it needs an approved Australian Regulatory Bundle, which can take days).
 - **Interim calling (decided 2026-11-08):** use **browser calling** with the Twilio Voice JS SDK from the dashboard ("Call the agent" button) until the AU number arrives. It goes through a TwiML App → the same `/twiml` → ConversationRelay path. Browser calls have no caller ID, so the dashboard sends a demo number (`demoFrom` → TwiML `<Parameter name="callerNumber">` → `setup.customParameters.callerNumber`). `callerNumberFor()` honours it **only** for `client:` callers.
@@ -42,25 +42,28 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 
 ## Status / open items
 - [x] Plan approved; scaffold + config
-- [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** (22 tools) and tested live
+- [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** and tested live (now the Virtual Agent endpoint, 12 `CF_` tools)
 - [x] Agent session + prompt + tools; chat CLI (not yet run end to end: needs ANTHROPIC_API_KEY)
 - [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
-- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 15 passing)
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 17 passing)
 
 ### Environment (user's setup, 2026-11-08)
-- Halo (QA instance): `https://dhinternalitsm.itsm.haloqa.co.uk`, MCP at `/api/mcp`, auth at `/auth`. Client-credentials auth works.
+- Halo (QA instance): `https://dhinternalitsm.itsm.haloqa.co.uk`, auth at `/auth`. Client-credentials auth works. **MCP endpoint (since 2026-11-08): a Halo Virtual Agent, `/api/VirtualAgent/04b2437f-0519-4c8a-8f41-a2a3bbbcb5db/mcp`** (was the generic `/api/mcp`, 22 tools).
 - ngrok static domain: `https://mutiny-seldom-produce.ngrok-free.dev` (= `PUBLIC_URL`; the TwiML App "Halo" points at `/twiml`). The user's ngrok is older: use `--domain=`, or update for `--url=`.
 - Twilio: full (paid) account; API key "API1"; TwiML App "Halo".
 - Demo caller: **Brenda Ross**, `+61 3 9561 7232` (E.164 `+61395617232`, set as `DEMO_CALLER_NUMBER`); has open ticket #3143 (VPN auth failure). Good for the "existing ticket → add note" scenario.
 
-### Halo MCP findings (this instance)
-- Tools carry accurate `readOnlyHint` annotations; the policy relies on them, plus explicit rules. Allowed: `create_ticket`, `add_note_to_ticket` (ticket_id), and the read-only tools except `get_user_info` / `get_assigned_tickets` (these describe the API account, not the caller). Denied: `action_ticket`, `apply_suggestion`, `assign_to_me`, `get_matches` (refresh = write), `log_service_request`, `log_time`.
-- `get_users` search is a **substring match on the stored, formatted phone** ("+61 3 9561 7232"); unspaced E.164 doesn't match. `identify.ts` tries spaced AU formats, then keeps only users whose number normalises to the caller's E.164.
-- Results look like `{page_no, page_size, record_count, total_pages, results:[...]}`, with a `link` on each record. Ticket URLs are `/ticket?id=N` (not `/tickets`).
-- `search_tickets` works by the user's name or email (`open_only: true`). **Assets aren't linked to users** (`get_assets` by user name → none); the agent asks for the asset tag instead.
-- `create_ticket` takes `user_email, summary (≤70 chars), description, ticket_type?`, with **no status field**, so "resolved on call" tickets are created open with a "Resolved on call:" prefix. Closing would need `action_ticket`, which is denied (open question for the user).
-- Instance-specific guidance lives in `config/tool-policy.json › promptNotes` (appended to the system prompt).
+### Halo MCP findings (Virtual Agent endpoint, 12 `CF_` tools)
+- Annotations: `CF_add_note`, `CF_close_ticket` destructive; `CF_log_incident`, `CF_search_services` not read-only; the rest `readOnlyHint`.
+- Policy: `CF_log_incident` = create_ticket; `CF_add_note` = add_note with `status`/`time_taken` omitted (its `status` enum could change any ticket's status, incl. Closed); `CF_close_ticket` = close_ticket (created-on-this-call only), so "resolved on call" tickets are now really closed; `CF_search_services` = read; `CF_retrieve_users` denied to the agent.
+- `CF_retrieve_users` (no args) returns **every** active user as `[{User, "Phone Number"}]`: name + spaced phone only, **no id or email**. `identify.ts` calls it once and matches on normalised E.164; the agent must ask for the caller's email before logging (`CF_log_incident` needs `user_email`).
+- `CF_search_tickets` is a vectorised search and found **nothing** for name, keyword or ticket number (blank search → "Failed to vectorise"). Possibly the index isn't built, or it's scoped to the API account. Agent asks for the ticket number and uses `CF_get_one_ticket` (works: returns `user_name`, `conversation`, `similar_tickets`, `actions`).
+- The add_note guard only takes a ticket tool's own top-level `id` (or items of a top-level `results` list), so `similar_tickets`/`actions` ids from `CF_get_one_ticket` don't become noteable.
+- `CF_log_incident` requires `CFimpact`, `CFurgency`, `category_1` (enums); optional `asset_id`. Its result shape is **untested** (no live ticket created yet); `recordTicket` falls back to the first 2+ digit number in the text, and a wrong ID only makes close/note fail safely.
+- `CF_search_assets` works (results `{page_no,..., results:[{id, asset_tag, asset_type, ...}]}`); assets still not linked to users. KB search returns resolution text inline.
+- Results are often plain text when empty ("No tickets found.") rather than JSON.
+- Instance-specific guidance lives in `config/tool-policy.json › promptNotes`.
 
 ### Next steps
 1. User adds `ANTHROPIC_API_KEY` to `.env`.

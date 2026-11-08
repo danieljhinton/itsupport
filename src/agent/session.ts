@@ -50,6 +50,8 @@ export class CallSession {
   private callerSeq = 0;
   /** Tickets seen or created on this call; add_note is limited to these. */
   private knownTickets = new Set<string>();
+  /** Tickets created on this call; close_ticket is limited to these. */
+  private createdTickets = new Set<string>();
 
   private readonly system: string;
 
@@ -232,7 +234,8 @@ export class CallSession {
       const msg = `Invalid input: ${JSON.stringify(tool.validate.errors?.slice(0, 3))}`;
       return finish(false, msg, errorResult(use.id, msg));
     }
-    const input = use.input as Record<string, unknown>;
+    const input = { ...(use.input as Record<string, unknown>) };
+    for (const k of tool.policy.omitArgs ?? []) delete input[k];
 
     // Local tools
     if (!tool.mcpName) {
@@ -255,12 +258,23 @@ export class CallSession {
       }
     }
 
+    // Policy: only close a ticket this call created (an issue resolved on the call).
+    if (tool.policy.kind === "close_ticket") {
+      if (!noteAllowed(tool.policy.ticketIdArg, input, this.createdTickets)) {
+        const msg = "Policy: you can only close a ticket you created on this call.";
+        return finish(false, msg, errorResult(use.id, msg));
+      }
+    }
+
     try {
       const res = await callHaloTool(tool.mcpName!, input);
       collectTicketIds(res.data, tool.mcpName!, this.knownTickets);
       if (!res.isError && tool.policy.kind === "create_ticket") this.recordTicket(res.data, res.text, "created");
       if (!res.isError && tool.policy.kind === "add_note") {
         this.recordTicket(undefined, String(input[tool.policy.ticketIdArg!]), "note_added");
+      }
+      if (!res.isError && tool.policy.kind === "close_ticket") {
+        this.recordTicket(undefined, String(input[tool.policy.ticketIdArg!]), "closed");
       }
       const text = compactResult(res.text, res.data);
       return finish(!res.isError, res.data ?? res.text, res.isError ? errorResult(use.id, text) : okResult(use.id, text));
@@ -270,11 +284,12 @@ export class CallSession {
     }
   }
 
-  private recordTicket(data: unknown, text: string, action: "created" | "note_added"): void {
+  private recordTicket(data: unknown, text: string, action: "created" | "note_added" | "closed"): void {
     const obj = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined;
     const id = obj?.id ?? obj?.ticket_id ?? /\b(\d{2,})\b/.exec(text)?.[1];
     const ticketId = id === undefined ? undefined : String(id);
     if (ticketId) this.knownTickets.add(ticketId);
+    if (ticketId && action === "created") this.createdTickets.add(ticketId);
     const web = config().HALO_WEB_URL?.replace(/\/$/, "");
     bus.publish(this.callId, {
       type: "ticket",
@@ -312,7 +327,7 @@ export function echoContent(message: Pick<Message, "content">): ContentParam[] {
   return blocks.filter((b, i) => i >= lastFallback || !drop.has(b.type));
 }
 
-/** add_note is only allowed on a ticket already seen (or created) on this call. */
+/** add_note / close_ticket: the ticket ID argument must be in the allowed set for this call. */
 export function noteAllowed(ticketIdArg: string | undefined, input: Record<string, unknown>, known: Set<string>): boolean {
   const id = ticketIdArg ? input[ticketIdArg] : undefined;
   return id !== undefined && id !== null && known.has(String(id));

@@ -81,14 +81,21 @@ export async function identifyCaller(from: string | undefined, policy: ToolPolic
   try {
     const target = toE164(from);
     const seen = new Map<string, Record<string, unknown>>();
+    // A tool without {phone} in its args lists every user (e.g. CF_retrieve_users): call it once.
+    const searches = JSON.stringify(policy.identify.args).includes("{phone}");
+    const tried = new Set<string>();
     for (const phone of phoneVariants(from)) {
-      const res = await callHaloTool(policy.identify.tool, fill(policy.identify.args, phone));
+      const args = fill(policy.identify.args, phone);
+      const key = JSON.stringify(args);
+      if (tried.has(key)) continue;
+      tried.add(key);
+      const res = await callHaloTool(policy.identify.tool, args);
       if (res.isError) continue;
       for (const u of extractUsers(res.data)) {
         const phones = userPhones(u);
-        // Search is a substring match, so keep only users whose number really is the caller's.
-        // (If the result has no phone fields at all, we can't check, so trust the search.)
-        if (phones.length === 0 || phones.some((p) => toE164(p) === target)) {
+        // Keep only users whose number really is the caller's. A phone search with no phone
+        // fields in its results can't be checked, so trust it; a full user list can't be trusted.
+        if ((searches && phones.length === 0) || phones.some((p) => toE164(p) === target)) {
           seen.set(String(u.id ?? JSON.stringify(u)), u);
         }
       }

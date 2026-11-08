@@ -6,7 +6,7 @@ export type CallEvent =
   | { type: "transcript"; role: "caller" | "agent"; text: string; interrupted?: boolean }
   | { type: "tool_call"; id: string; tool: string; kind: string; input: unknown }
   | { type: "tool_result"; id: string; tool: string; ok: boolean; ms: number; result: unknown }
-  | { type: "ticket"; action: "created" | "note_added"; ticketId?: string; url?: string }
+  | { type: "ticket"; action: "created" | "note_added" | "closed"; ticketId?: string; url?: string }
   | { type: "latency"; firstTokenMs: number }
   | { type: "status"; message: string }
   | { type: "call_ended"; outcome?: string; summary?: string };

@@ -200,7 +200,7 @@
       else if (e.type === "caller_identified") t.push(`<div class="note">Caller lookup: ${esc(e.status)}${userName(e.user) ? " → " + esc(userName(e.user)) : ""}</div>`);
       else if (e.type === "status") t.push(`<div class="note">${esc(e.message)}</div>`);
       else if (e.type === "call_ended") t.push(`<div class="note">Call ended${e.outcome ? " · " + esc(e.outcome) : ""}${e.summary ? " · " + esc(e.summary) : ""}</div>`);
-      else if (e.type === "ticket") tools.push(`<div class="ticket">${e.action === "created" ? "Ticket created" : "Note added to ticket"} ${e.ticketId ? "#" + esc(e.ticketId) : ""} ${e.url ? `· <a href="${esc(e.url)}" target="_blank" rel="noopener">open in Halo</a>` : ""}</div>`);
+      else if (e.type === "ticket") tools.push(`<div class="ticket">${e.action === "created" ? "Ticket created" : e.action === "closed" ? "Ticket closed" : "Note added to ticket"} ${e.ticketId ? "#" + esc(e.ticketId) : ""} ${e.url ? `· <a href="${esc(e.url)}" target="_blank" rel="noopener">open in Halo</a>` : ""}</div>`);
       else if (e.type === "tool_call") {
         calls_++;
         const r = results.get(e.id);

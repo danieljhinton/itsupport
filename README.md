@@ -52,11 +52,12 @@ cp .env.example .env
 4. Edit **`config/tool-policy.json`** so the rules match those tool names. The policy is the guardrail. Claude only sees tools that are:
    - read-only (matched as `read`, or marked `readOnlyHint` by the server)
    - ticket creation (`create_ticket`)
-   - adding a note/action to a ticket (`add_note`); set `ticketIdArg` to the tool's ticket ID parameter
+   - adding a note to a ticket (`add_note`); set `ticketIdArg` to the tool's ticket ID parameter
+   - closing a ticket (`close_ticket`), allowed in code **only** for a ticket the agent created on this call (an issue resolved on the call)
 
-   Everything else (updates, closes, deletes, asset or user edits) is hidden from the agent. Notes are also limited in code to tickets the agent has already looked up, or created, on the current call.
+   Everything else (updates, other closes, deletes, asset or user edits) is hidden from the agent. Notes are also limited in code to tickets the agent has already looked up, or created, on the current call. `omitArgs` hides risky arguments (for example a `status` field on a note tool) from the agent and strips them before the call.
 
-   Optionally set `identify.tool` / `identify.args` to the user-search tool, so the caller is looked up by phone number while the greeting plays.
+   Optionally set `identify.tool` / `identify.args` to the user-search tool, so the caller is looked up by phone number while the greeting plays. Put `{phone}` in the args for a search tool; leave it out for a tool that lists every user (it is called once and filtered by number).
 
 5. Test the agent end to end in your terminal, with no phone needed:
 

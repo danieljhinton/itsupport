@@ -14,14 +14,12 @@ const t = (name: string, readOnlyHint?: boolean) => ({
   inputSchema: { type: "object" as const, properties: { ticket_id: { type: "number" } } },
 });
 
-// The real Halo MCP catalogue (name + readOnlyHint) as listed on 2026-11-08.
+// The real Halo Virtual Agent MCP catalogue (name + readOnlyHint) as listed on 2026-11-08.
 const haloCatalogue: [string, boolean][] = [
-  ["action_ticket", false], ["add_note_to_ticket", false], ["apply_suggestion", false], ["assign_to_me", false],
-  ["create_ticket", false], ["get_assets", true], ["get_assigned_tickets", true], ["get_clients", true],
-  ["get_knowledge", true], ["get_matches", false], ["get_one_article", true], ["get_one_asset", true],
-  ["get_one_client", true], ["get_one_site", true], ["get_one_ticket", true], ["get_one_user", true],
-  ["get_sites", true], ["get_user_info", true], ["get_users", true], ["log_service_request", false],
-  ["log_time", false], ["search_tickets", true],
+  ["CF_add_note", false], ["CF_close_ticket", false], ["CF_get_one_article", true], ["CF_get_one_asset", true],
+  ["CF_get_one_ticket", true], ["CF_get_one_user", true], ["CF_log_incident", false], ["CF_retrieve_users", true],
+  ["CF_search_assets", true], ["CF_search_knowledge_base", true], ["CF_search_services", false],
+  ["CF_search_tickets", true],
 ];
 
 describe("tool policy", () => {
@@ -30,38 +28,36 @@ describe("tool policy", () => {
       haloCatalogue.map(([n, ro]) => [n, classifyTool(t(n, ro), policy).kind]).filter(([, k]) => k !== "deny"),
     );
     expect(allowed).toEqual({
-      add_note_to_ticket: "add_note",
-      create_ticket: "create_ticket",
-      get_assets: "read",
-      get_clients: "read",
-      get_knowledge: "read",
-      get_one_article: "read",
-      get_one_asset: "read",
-      get_one_client: "read",
-      get_one_site: "read",
-      get_one_ticket: "read",
-      get_one_user: "read",
-      get_sites: "read",
-      get_users: "read",
-      search_tickets: "read",
+      CF_add_note: "add_note",
+      CF_close_ticket: "close_ticket",
+      CF_get_one_article: "read",
+      CF_get_one_asset: "read",
+      CF_get_one_ticket: "read",
+      CF_get_one_user: "read",
+      CF_log_incident: "create_ticket",
+      CF_search_assets: "read",
+      CF_search_knowledge_base: "read",
+      CF_search_services: "read",
+      CF_search_tickets: "read",
     });
   });
 
-  it("denies writes and tools that describe the API account", () => {
-    for (const n of ["action_ticket", "apply_suggestion", "assign_to_me", "get_matches", "log_service_request", "log_time"]) {
-      expect(classifyTool(t(n, false), policy).kind).toBe("deny");
-    }
-    // Annotated read-only, but they describe the service account rather than the caller.
-    expect(classifyTool(t("get_user_info", true), policy).kind).toBe("deny");
-    expect(classifyTool(t("get_assigned_tickets", true), policy).kind).toBe("deny");
+  it("denies the full user list and name-based risky tools", () => {
+    // Annotated read-only, but it lists every user's phone number; only the pre-call lookup uses it.
+    expect(classifyTool(t("CF_retrieve_users", true), policy).kind).toBe("deny");
     // Name-based safety nets for tools Halo might add later.
     expect(classifyTool(t("update_ticket", true), policy).kind).toBe("deny");
     expect(classifyTool(t("delete_asset", true), policy).kind).toBe("deny");
     expect(classifyTool(t("close_ticket", true), policy).kind).toBe("deny");
   });
 
-  it("has a ticket ID argument that matches the real add_note_to_ticket schema", () => {
-    expect(classifyTool(t("add_note_to_ticket", false), policy)).toEqual({ kind: "add_note", ticketIdArg: "ticket_id" });
+  it("matches the real note and close schemas", () => {
+    expect(classifyTool(t("CF_add_note", false), policy)).toEqual({
+      kind: "add_note", ticketIdArg: "ticket_id", omitArgs: ["status", "time_taken"],
+    });
+    expect(classifyTool(t("CF_close_ticket", false), policy)).toEqual({
+      kind: "close_ticket", ticketIdArg: "ticket_id", omitArgs: ["time_taken"],
+    });
   });
 
   it("falls back to the readOnly annotation for unmatched tools", () => {
@@ -75,6 +71,21 @@ describe("tool policy", () => {
       (x) => x.name,
     );
     expect(names).toEqual(["get_assets", "halo_tool_x", "end_call", "transfer_to_human"]);
+  });
+
+  it("hides the status argument of CF_add_note from Claude", () => {
+    const note = {
+      name: "CF_add_note",
+      annotations: { readOnlyHint: false },
+      inputSchema: {
+        type: "object" as const,
+        properties: { ticket_id: { type: "number" }, note: { type: "string" }, status: { type: "string" }, time_taken: { type: "string" } },
+        required: ["ticket_id", "status"],
+      },
+    };
+    const [tool] = buildAgentTools([note] as never, policy);
+    expect(Object.keys(tool.definition.input_schema.properties as object)).toEqual(["ticket_id", "note"]);
+    expect(tool.definition.input_schema.required).toEqual(["ticket_id"]);
   });
 });
 
@@ -91,6 +102,16 @@ describe("add_note guard", () => {
   it("does not treat user or asset ids as ticket ids", () => {
     const known = collectTicketIds({ users: [{ id: 5 }], assets: [{ id: 7, ticket_id: 42 }] }, "get_assets");
     expect([...known]).toEqual(["42"]);
+  });
+
+  it("takes only the ticket's own id from CF_get_one_ticket, not similar tickets or actions", () => {
+    const known = collectTicketIds(
+      { similar_tickets: [{ id: 900 }], actions: [{ id: 7 }, { id: 4 }], conversation: [{ id: 11 }], id: 3143 },
+      "CF_get_one_ticket",
+    );
+    expect([...known]).toEqual(["3143"]);
+    const search = collectTicketIds({ page_no: 1, results: [{ id: 3143, actions: [{ id: 7 }] }] }, "CF_search_tickets");
+    expect([...search]).toEqual(["3143"]);
   });
 });
 

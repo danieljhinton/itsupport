@@ -57,7 +57,18 @@ const KIND_NOTE: Partial<Record<Classified["kind"], string>> = {
     "\n\n[Policy] Use to log a ticket for this caller: open if unresolved, closed/resolved if fixed on the call.",
   add_note:
     "\n\n[Policy] Only for adding a note to one of this caller's existing tickets that you have already looked up on this call.",
+  close_ticket:
+    "\n\n[Policy] Only for closing a ticket you created on this call for an issue that was resolved on the call.",
 };
+
+/** Remove arguments the policy hides from Claude. */
+function omitFromSchema(schema: Record<string, unknown>, omit: string[] = []): Record<string, unknown> {
+  if (!omit.length) return schema;
+  const props = { ...((schema.properties as Record<string, unknown>) ?? {}) };
+  for (const k of omit) delete props[k];
+  const required = Array.isArray(schema.required) ? schema.required.filter((k) => !omit.includes(k)) : undefined;
+  return { ...schema, properties: props, ...(required ? { required } : {}) };
+}
 
 /**
  * Turn the Halo MCP catalogue into the tool list Claude sees, applying the policy.
@@ -68,7 +79,10 @@ export function buildAgentTools(mcpTools: McpTool[], policy: ToolPolicy): AgentT
   for (const t of [...mcpTools].sort((a, b) => a.name.localeCompare(b.name))) {
     const cls = classifyTool(t, policy);
     if (cls.kind === "deny") continue;
-    const schema = (t.inputSchema ?? { type: "object", properties: {} }) as Anthropic.Beta.Messages.BetaTool.InputSchema;
+    const schema = omitFromSchema(
+      (t.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
+      cls.omitArgs,
+    ) as Anthropic.Beta.Messages.BetaTool.InputSchema;
     const definition: Anthropic.Beta.Messages.BetaTool = {
       name: sanitiseName(t.name),
       description: ((t.description ?? t.title ?? t.name) + (KIND_NOTE[cls.kind] ?? "")).slice(0, 4000),
