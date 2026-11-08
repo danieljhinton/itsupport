@@ -247,9 +247,7 @@ export class CallSession {
 
     // Policy: notes only on tickets already seen for this caller on this call.
     if (tool.policy.kind === "add_note") {
-      const arg = tool.policy.ticketIdArg;
-      const id = arg ? input[arg] : undefined;
-      if (id === undefined || !this.knownTickets.has(String(id))) {
+      if (!noteAllowed(tool.policy.ticketIdArg, input, this.knownTickets)) {
         const msg = "Policy: you can only add notes to this caller's tickets that you have already looked up on this call.";
         return finish(false, msg, errorResult(use.id, msg));
       }
@@ -309,6 +307,12 @@ export function echoContent(message: Pick<Message, "content">): ContentParam[] {
   if (lastFallback < 0) return blocks;
   const drop = new Set(["thinking", "redacted_thinking", "tool_use", "server_tool_use"]);
   return blocks.filter((b, i) => i >= lastFallback || !drop.has(b.type));
+}
+
+/** add_note is only allowed on a ticket already seen (or created) on this call. */
+export function noteAllowed(ticketIdArg: string | undefined, input: Record<string, unknown>, known: Set<string>): boolean {
+  const id = ticketIdArg ? input[ticketIdArg] : undefined;
+  return id !== undefined && id !== null && known.has(String(id));
 }
 
 function okResult(id: string, text: string): ToolResult {

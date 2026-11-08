@@ -44,4 +44,16 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - [x] Agent session + prompt + tools; chat CLI (not yet run against live Halo)
 - [x] Twilio TwiML + relay (smoke-tested locally; not yet on a real call)
 - [x] Dashboard
-- [ ] README, Dockerfile, tests
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 12 passing)
+
+### Next steps (need the user's credentials / accounts)
+1. Fill `.env` with real Halo, Anthropic and Twilio values.
+2. `npm run list-tools` → adjust `config/tool-policy.json` rule names, `ticketIdArg` and the `identify` tool to the real Halo MCP tool names.
+3. `npm run chat` through the demo scenarios in README; tune `src/agent/prompt.ts`.
+4. Twilio AU Regulatory Bundle → buy number → `npm run setup:twilio` → live call test (latency, barge-in).
+
+### Known limitations / ideas
+- The end-of-call hang-up waits an estimated TTS duration (~70 ms/char) before sending `{type:"end"}`.
+- `transfer_to_human` is a stub (logs to the dashboard; it could use a TwiML `<Dial>` via `handoffData` + action URL).
+- Ticket IDs for the add_note guard are found heuristically in tool results (`policy.ts › collectTicketIds`). Check this against real Halo result shapes.
+- Sessions and dashboard history are in memory only.
