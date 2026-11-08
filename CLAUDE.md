@@ -13,7 +13,8 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - **Caller identification:** caller ID lookup in Halo first; if there's no match or more than one, the agent asks for name/email.
 - **Halo write policy:** the agent may (1) create tickets: open if unresolved, closed if resolved on the call (for reporting); (2) add notes to the caller's existing tickets. **No other writes.** Enforced in code by `config/tool-policy.json` plus `src/agent/tools.ts`. Read-only tools are allowed when the MCP tool is annotated `readOnlyHint` or listed as `read`.
 - **Hosting:** local + ngrok for demos, with a Dockerfile for later.
-- **Twilio:** account exists, **AU number not bought yet**. It needs an approved Australian Regulatory Bundle, which can take days.
+- **Twilio:** account exists, **AU number not bought yet** (it needs an approved Australian Regulatory Bundle, which can take days).
+- **Interim calling (decided 2026-11-08):** use **browser calling** with the Twilio Voice JS SDK from the dashboard ("Call the agent" button) until the AU number arrives. It goes through a TwiML App → the same `/twiml` → ConversationRelay path. Browser calls have no caller ID, so the dashboard sends a demo number (`demoFrom` → TwiML `<Parameter name="callerNumber">` → `setup.customParameters.callerNumber`). `callerNumberFor()` honours it **only** for `client:` callers.
 
 ## Conventions
 - **Commit and push to GitHub (`origin` = github.com/danieljhinton/itsupport, branch `main`) after each meaningful milestone.** The user asked for this.
@@ -23,7 +24,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - Secrets live in `.env` (gitignored). `.env.example` documents every variable.
 
 ## Layout
-- `src/server.ts`: Fastify routes `/twiml`, `/relay` (ws), `/dashboard`, `/events` (SSE), `/health`
+- `src/server.ts`: Fastify routes `/twiml`, `/relay` (ws), `/dashboard`, `/events` (SSE), `/token` (Voice SDK access token), `/vendor/twilio-voice.min.js`, `/health`
 - `src/twilio/`: TwiML builder + ConversationRelay websocket handler
 - `src/agent/`: `session.ts` (streaming tool loop, interrupts), `prompt.ts`, `tools.ts` (policy + MCP→Claude tool mapping)
 - `src/halo/`: `auth.ts` (token cache), `mcp.ts` (MCP client), `identify.ts` (caller lookup)
@@ -44,13 +45,15 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - [x] Agent session + prompt + tools; chat CLI (not yet run against live Halo)
 - [x] Twilio TwiML + relay (smoke-tested locally; not yet on a real call)
 - [x] Dashboard
-- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 12 passing)
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 13 passing)
+- [x] Browser calling from the dashboard (smoke-tested: token, TwiML params, scripts; not yet on a real Twilio account)
 
 ### Next steps (need the user's credentials / accounts)
 1. Fill `.env` with real Halo, Anthropic and Twilio values.
 2. `npm run list-tools` → adjust `config/tool-policy.json` rule names, `ticketIdArg` and the `identify` tool to the real Halo MCP tool names.
 3. `npm run chat` through the demo scenarios in README; tune `src/agent/prompt.ts`.
-4. Twilio AU Regulatory Bundle → buy number → `npm run setup:twilio` → live call test (latency, barge-in).
+4. Browser calling: create a Twilio API key + TwiML App (Voice URL `{PUBLIC_URL}/twiml`), set `TWILIO_API_KEY_SID/SECRET`, `TWILIO_TWIML_APP_SID`, `DEMO_CALLER_NUMBER` → click **Call the agent** on the dashboard (latency, barge-in).
+5. Later: Twilio AU Regulatory Bundle → buy number → `npm run setup:twilio` → real phone call test. No code changes needed.
 
 ### Known limitations / ideas
 - The end-of-call hang-up waits an estimated TTS duration (~70 ms/char) before sending `{type:"end"}`.

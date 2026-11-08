@@ -64,24 +64,37 @@ cp .env.example .env
    npm run chat -- --from +61412345678
    ```
 
-## 3. Twilio (Australian number)
+## 3. Twilio: call from your browser (no phone number needed)
 
-Australian numbers need an approved **Regulatory Bundle**. Start this first, because approval can take a few business days.
+The dashboard has a **Call the agent** button that calls over WebRTC using the Twilio Voice JS SDK. The call goes through the same `/twiml` → ConversationRelay path as a phone call, so everything behaves the same.
+
+1. Twilio Console → **Account → API keys & tokens → Create API key** (Standard). Put the SID and secret in `TWILIO_API_KEY_SID` / `TWILIO_API_KEY_SECRET`.
+2. Twilio Console → **Voice → TwiML Apps → Create**. Set the Voice Request URL to `{PUBLIC_URL}/twiml` (HTTP POST). Put its SID (`AP...`) in `TWILIO_TWIML_APP_SID`.
+3. Set `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` (used to check webhook signatures).
+4. Set `DEMO_CALLER_NUMBER` to the phone number of a Halo demo user. Browser calls have no caller ID, so the dashboard sends this number instead (you can change it in the **Call as** box). This only works for browser calls; real phone calls always use their own caller ID.
+
+Open the dashboard on `http://localhost:3000/dashboard` (microphone access needs `localhost` or HTTPS), click **Call the agent** and allow the microphone. The SDK uses Twilio's Sydney edge for low latency.
+
+If your ngrok URL changes, update `PUBLIC_URL` and the TwiML App's Voice URL.
+
+## 4. Twilio: Australian phone number (later)
+
+Australian numbers need an approved **Regulatory Bundle**. Start this early, because approval can take a few business days. The code doesn't need to change; it's only configuration.
 
 1. Twilio Console → **Phone Numbers → Regulatory Compliance → Bundles → Create**. Choose Australia, your number type (Local or Mobile) and Business, then provide the business details and an Australian address.
 2. Once it's approved, buy an AU number with **Voice** capability and assign the bundle.
 3. Accept the AI/ML features addendum for ConversationRelay if the Console asks.
 4. Put `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_PHONE_NUMBER` in `.env`.
 
-## 4. Run it
+## 5. Run it
 
 ```bash
-ngrok http 3000                # copy the https URL into PUBLIC_URL in .env
-npm run setup:twilio           # points the number's voice webhook at PUBLIC_URL/twiml
+ngrok http 3000                # copy the https URL into PUBLIC_URL in .env (and the TwiML App's Voice URL)
 npm run dev                    # start the server
+npm run setup:twilio           # only once you have the AU number: points its webhook at PUBLIC_URL/twiml
 ```
 
-Open **http://localhost:3000/dashboard** and ring the number.
+Open **http://localhost:3000/dashboard**, then click **Call the agent** or ring the number.
 
 If you expose the dashboard through ngrok, set `DASHBOARD_TOKEN` and open `/dashboard?token=...`.
 

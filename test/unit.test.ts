@@ -112,3 +112,12 @@ describe("ConversationRelay", () => {
     expect(verifyCallSid("CA1", undefined)).toBe(false);
   });
 });
+
+describe("browser calling", () => {
+  it("uses the demo number only for browser (client:) calls", async () => {
+    const { callerNumberFor } = await import("../src/twilio/twiml.js");
+    expect(callerNumberFor({ From: "client:dashboard-demo", demoFrom: "+61 412 345 678" })).toBe("+61412345678");
+    expect(callerNumberFor({ From: "client:dashboard-demo" })).toBeUndefined();
+    expect(callerNumberFor({ From: "+61298765432", demoFrom: "+61412345678" })).toBe("+61298765432");
+  });
+});

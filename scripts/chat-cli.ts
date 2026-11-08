@@ -31,6 +31,8 @@ bus.on("event", (e) => {
   if (e.type === "latency") console.log(`  (first token ${e.firstTokenMs}ms)`);
 });
 
+bus.publish(callId, { type: "call_started", from, channel: "cli" });
+
 const session = new CallSession({
   callId,
   tools,

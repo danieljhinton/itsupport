@@ -7,7 +7,7 @@ import { config } from "./config.js";
 import { agentSetup } from "./agent/index.js";
 import { bus, type BusEvent } from "./events/bus.js";
 import { closeHalo } from "./halo/mcp.js";
-import { conversationRelayTwiml, validTwilioSignature } from "./twilio/twiml.js";
+import { browserCallToken, callerNumberFor, conversationRelayTwiml, validTwilioSignature } from "./twilio/twiml.js";
 import { handleRelaySocket } from "./twilio/relay.js";
 
 const cfg = config();
@@ -49,7 +49,29 @@ app.post("/twiml", async (req, reply) => {
     }
   }
   reply.type("text/xml");
-  return conversationRelayTwiml(params.CallSid ?? "", publicBase(req));
+  return conversationRelayTwiml(params.CallSid ?? "", publicBase(req), callerNumberFor(params));
+});
+
+// Voice access token for browser calls from the dashboard.
+app.get("/token", async (req, reply) => {
+  if (!dashboardAllowed(req, reply)) return;
+  const token = browserCallToken("dashboard-demo");
+  if (!token) {
+    return reply.code(503).send({
+      error: "Browser calling isn't configured. Set TWILIO_ACCOUNT_SID, TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET and TWILIO_TWIML_APP_SID.",
+    });
+  }
+  return { token, demoCallerNumber: cfg.DEMO_CALLER_NUMBER ?? "" };
+});
+
+// Twilio Voice JS SDK, served from node_modules (exposes window.Twilio.Device).
+const voiceSdk = readFileSync(
+  fileURLToPath(new URL("../node_modules/@twilio/voice-sdk/dist/twilio.min.js", import.meta.url)),
+  "utf8",
+);
+app.get("/vendor/twilio-voice.min.js", async (_req, reply) => {
+  reply.type("application/javascript").header("Cache-Control", "public, max-age=86400");
+  return voiceSdk;
 });
 
 app.get("/relay", { websocket: true }, (socket, req) => {

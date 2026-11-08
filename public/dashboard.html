@@ -20,10 +20,18 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
   header h1 { font-size: 17px; margin: 0; font-weight: 650; }
   header .sub { color: var(--muted); font-size: 13px; }
-  #conn { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  #dialer { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #dialer label { font-size: 12px; color: var(--muted); }
+  #dialer input { font: 13px var(--mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 150px; }
+  #dialer button { font: 600 13px system-ui, sans-serif; padding: 7px 14px; border-radius: 6px; border: 0; cursor: pointer; background: var(--ok); color: #fff; }
+  #dialer button.hang { background: var(--err); }
+  #dialer button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  #dialer button:disabled { opacity: .5; cursor: default; }
+  #callstate { font-size: 12px; color: var(--muted); min-width: 70px; }
+  #conn { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
   #conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--err); display: inline-block; }
   #conn.live i { background: var(--ok); }
   main { display: grid; grid-template-columns: 230px 1fr 1fr; gap: 16px; padding: 16px 20px; height: calc(100vh - 56px); }
@@ -69,6 +77,13 @@
     <h1>Halo Voice Agent</h1>
     <div class="sub">Live calls · Claude + HaloITSM MCP</div>
   </div>
+  <div id="dialer">
+    <label for="demoFrom">Call as</label>
+    <input id="demoFrom" type="tel" placeholder="+61412345678" title="Phone number of the Halo user to pretend to be">
+    <button id="callBtn" type="button">Call the agent</button>
+    <button id="muteBtn" type="button" class="ghost" hidden>Mute</button>
+    <span id="callstate"></span>
+  </div>
   <div id="conn"><i></i><span>connecting</span></div>
 </header>
 <main>
@@ -76,6 +91,69 @@
   <section><h2><span>Conversation</span><span class="ident" id="ident"></span></h2><div class="scroll" id="transcript"></div></section>
   <section><h2><span>Halo MCP activity</span><span id="toolcount"></span></h2><div class="scroll" id="tools"></div></section>
 </main>
+<script src="/vendor/twilio-voice.min.js"></script>
+<script>
+// Browser calling: rings the agent over WebRTC through the TwiML App (no phone number needed).
+(() => {
+  const qs = location.search;
+  const btn = document.getElementById("callBtn");
+  const mute = document.getElementById("muteBtn");
+  const state = document.getElementById("callstate");
+  const input = document.getElementById("demoFrom");
+  let device = null, call = null, timer = null;
+
+  try { input.value = localStorage.getItem("demoFrom") || ""; } catch {}
+  input.addEventListener("change", () => { try { localStorage.setItem("demoFrom", input.value.trim()); } catch {} });
+
+  async function fetchToken() {
+    const res = await fetch("/token" + qs);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Token request failed (${res.status})`);
+    if (!input.value && body.demoCallerNumber) input.value = body.demoCallerNumber;
+    return body.token;
+  }
+
+  async function getDevice() {
+    if (device) return device;
+    device = new Twilio.Device(await fetchToken(), { codecPreferences: ["opus", "pcmu"], edge: ["sydney", "roaming"] });
+    device.on("tokenWillExpire", async () => { try { device.updateToken(await fetchToken()); } catch (e) { console.error(e); } });
+    device.on("error", (e) => setState(`Error: ${e.message || e}`));
+    return device;
+  }
+
+  function setState(text) { state.textContent = text; }
+  function idle() {
+    call = null; clearInterval(timer);
+    btn.textContent = "Call the agent"; btn.className = ""; btn.disabled = false;
+    mute.hidden = true; mute.textContent = "Mute";
+  }
+
+  btn.addEventListener("click", async () => {
+    if (call) { call.disconnect(); return; }
+    btn.disabled = true; setState("Connecting…");
+    try {
+      const d = await getDevice();
+      call = await d.connect({ params: { demoFrom: input.value.trim() } });
+      btn.textContent = "Hang up"; btn.className = "hang"; btn.disabled = false;
+      call.on("accept", () => {
+        const t0 = Date.now(); mute.hidden = false;
+        timer = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); setState(`On call ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`); }, 1000);
+        setState("On call 0:00");
+      });
+      call.on("disconnect", () => { idle(); setState("Call ended"); });
+      call.on("cancel", () => { idle(); setState("Cancelled"); });
+      call.on("error", (e) => { idle(); setState(`Error: ${e.message || e}`); });
+    } catch (e) {
+      console.error(e); idle(); setState(e.message || String(e));
+    }
+  });
+
+  mute.addEventListener("click", () => {
+    if (!call) return;
+    const m = !call.isMuted(); call.mute(m); mute.textContent = m ? "Unmute" : "Mute";
+  });
+})();
+</script>
 <script>
 (() => {
   const calls = new Map(); // callId -> {meta, events: []}
@@ -107,7 +185,7 @@
     $("calls").innerHTML = list.length ? list.map((c) => `
       <div class="call ${c.id === selected ? "sel" : ""} ${c.ended ? "ended" : ""}" data-id="${esc(c.id)}">
         <b><span class="dot"></span>${esc(userName(c.user) || c.from || (c.channel === "cli" ? "Terminal test" : "Unknown caller"))}</b>
-        <small>${time(c.started)} · ${c.ended ? "ended" : "live"}</small>
+        <small>${time(c.started)} · ${{ browser: "browser", cli: "terminal", phone: "phone" }[c.channel] || "call"} · ${c.ended ? "ended" : "live"}</small>
       </div>`).join("") : `<div class="empty">Waiting for a call…</div>`;
     const c = calls.get(selected);
     if (!c) return;

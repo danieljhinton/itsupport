@@ -43,8 +43,11 @@ export function handleRelaySocket(ws: WebSocket, sig: string | undefined, log: (
         return;
       }
       callId = msg.callSid;
-      bus.publish(callId, { type: "call_started", from: msg.from, to: msg.to, channel: "phone" });
-      sessionPromise = startSession(callId, msg.from, send);
+      const browser = msg.from?.startsWith("client:") ?? false;
+      // For browser calls this is the demo number chosen on the dashboard.
+      const callerNumber = msg.customParameters?.callerNumber ?? (browser ? undefined : msg.from);
+      bus.publish(callId, { type: "call_started", from: callerNumber, to: msg.to, channel: browser ? "browser" : "phone" });
+      sessionPromise = startSession(callId, callerNumber, send);
       sessionPromise.catch((err) => {
         log(`session setup failed: ${err}`);
         send({ type: "text", token: "Sorry, our IT systems are unavailable right now. Please try again later.", last: true });

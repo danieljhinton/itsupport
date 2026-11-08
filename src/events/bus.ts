@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 
 export type CallEvent =
-  | { type: "call_started"; from?: string; to?: string; channel: "phone" | "cli" }
+  | { type: "call_started"; from?: string; to?: string; channel: "phone" | "browser" | "cli" }
   | { type: "caller_identified"; status: "matched" | "ambiguous" | "none" | "error"; user?: unknown; detail?: string }
   | { type: "transcript"; role: "caller" | "agent"; text: string; interrupted?: boolean }
   | { type: "tool_call"; id: string; tool: string; kind: string; input: unknown }

@@ -29,6 +29,12 @@ const schema = z.object({
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_PHONE_NUMBER: z.string().optional(),
+  // Browser calling (Twilio Voice JS SDK): API key + TwiML App whose Voice URL is {PUBLIC_URL}/twiml
+  TWILIO_API_KEY_SID: z.string().optional(),
+  TWILIO_API_KEY_SECRET: z.string().optional(),
+  TWILIO_TWIML_APP_SID: z.string().optional(),
+  // Caller ID to pretend to be on browser calls (a phone number stored on a Halo demo user)
+  DEMO_CALLER_NUMBER: z.string().optional(),
   TTS_PROVIDER: z.string().default("Google"),
   TTS_VOICE: z.string().default("en-AU-Neural2-C"),
   TRANSCRIPTION_PROVIDER: z.string().default("Deepgram"),
