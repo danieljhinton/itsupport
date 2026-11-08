@@ -37,6 +37,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - `npm run typecheck` / `npm test`
 - `npm run list-tools`: print the Halo MCP tool catalogue (use it to fill `config/tool-policy.json`)
 - `npm run chat`: talk to the agent in the terminal (full Halo MCP, no Twilio)
+- `npm run check:twilio`: check Twilio creds, API key, TwiML App URL and the ngrok URL (prints no secrets)
 - `npm run setup:twilio`: point the AU number's voice webhook at `${PUBLIC_URL}/twiml`
 
 ## Status / open items
