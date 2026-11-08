@@ -14,13 +14,13 @@ export interface AgentTool {
   /** Original Halo MCP tool name; undefined for local tools. */
   mcpName?: string;
   policy: Classified;
-  definition: Anthropic.Tool;
+  definition: Anthropic.Beta.Messages.BetaTool;
   validate: ValidateFunction;
 }
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 
-const localDefinitions: Anthropic.Tool[] = [
+const localDefinitions: Anthropic.Beta.Messages.BetaTool[] = [
   {
     name: LOCAL_TOOLS.end_call,
     description:
@@ -68,8 +68,8 @@ export function buildAgentTools(mcpTools: McpTool[], policy: ToolPolicy): AgentT
   for (const t of [...mcpTools].sort((a, b) => a.name.localeCompare(b.name))) {
     const cls = classifyTool(t, policy);
     if (cls.kind === "deny") continue;
-    const schema = (t.inputSchema ?? { type: "object", properties: {} }) as Anthropic.Tool.InputSchema;
-    const definition: Anthropic.Tool = {
+    const schema = (t.inputSchema ?? { type: "object", properties: {} }) as Anthropic.Beta.Messages.BetaTool.InputSchema;
+    const definition: Anthropic.Beta.Messages.BetaTool = {
       name: sanitiseName(t.name),
       description: ((t.description ?? t.title ?? t.name) + (KIND_NOTE[cls.kind] ?? "")).slice(0, 4000),
       input_schema: { ...schema, type: "object" },
