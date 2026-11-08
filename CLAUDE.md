@@ -40,7 +40,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 
 ## Status / open items
 - [x] Plan approved; scaffold + config
-- [ ] Halo auth + MCP client; **real Halo MCP tool names not yet confirmed**. Run `npm run list-tools` against the instance and update `config/tool-policy.json`
+- [x] Halo auth + MCP client + tool policy; **real Halo MCP tool names not yet confirmed**. Run `npm run list-tools` against the instance and update `config/tool-policy.json`
 - [ ] Agent session + prompt + tools; chat CLI
 - [ ] Twilio TwiML + relay
 - [ ] Dashboard

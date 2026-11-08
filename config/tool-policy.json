@@ -1,0 +1,30 @@
+{
+  "_readme": [
+    "Controls which Halo MCP tools the voice agent can use. Rules are checked in order; first match wins.",
+    "kind: read | create_ticket | add_note | deny. 'match' is a tool name or a glob (* wildcard), case-insensitive.",
+    "Tools that match no rule are allowed only if the MCP server marks them readOnlyHint=true (and allowReadOnlyAnnotated is true).",
+    "Run `npm run list-tools` against your Halo instance and adjust the names below to match.",
+    "Write policy agreed for the PoC: create tickets + add notes to the caller's own tickets. Nothing else."
+  ],
+  "allowReadOnlyAnnotated": true,
+  "rules": [
+    { "match": "*delete*", "kind": "deny" },
+    { "match": "*update*", "kind": "deny" },
+    { "match": "*close*", "kind": "deny" },
+    { "match": "*asset*create*", "kind": "deny" },
+    { "match": "*create*asset*", "kind": "deny" },
+    { "match": "*create*user*", "kind": "deny" },
+    { "match": "*create*ticket*", "kind": "create_ticket" },
+    { "match": "*add*action*", "kind": "add_note", "ticketIdArg": "ticket_id" },
+    { "match": "*add*note*", "kind": "add_note", "ticketIdArg": "ticket_id" },
+    { "match": "get_*", "kind": "read" },
+    { "match": "list_*", "kind": "read" },
+    { "match": "search_*", "kind": "read" },
+    { "match": "find_*", "kind": "read" }
+  ],
+  "identify": {
+    "_readme": "Optional pre-call caller lookup. {phone} is replaced with each phone variant (E.164 and local 0... form). Delete this block to let the agent identify the caller itself.",
+    "tool": "search_users",
+    "args": { "search": "{phone}" }
+  }
+}
