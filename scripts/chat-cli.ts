@@ -5,6 +5,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { agentSetup, CallSession } from "../src/agent/index.js";
+import { config } from "../src/config.js";
 import { bus } from "../src/events/bus.js";
 import { identifyCaller, identifyNote } from "../src/halo/identify.js";
 import { closeHalo } from "../src/halo/mcp.js";
@@ -38,6 +39,7 @@ const session = new CallSession({
   tools,
   system,
   contextNote: identifyNote(from, ident),
+  greeting: config().WELCOME_GREETING,
   channel: {
     speak(token, last) {
       if (!speaking) stdout.write("\nAgent: ");
@@ -57,6 +59,7 @@ const session = new CallSession({
 });
 
 console.log("Type what the caller says. Ctrl+C to quit.\n");
+console.log(`Agent: ${config().WELCOME_GREETING}`);
 rl.on("close", async () => {
   session.close();
   await closeHalo();

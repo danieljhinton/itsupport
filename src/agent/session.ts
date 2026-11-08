@@ -63,12 +63,27 @@ export class CallSession {
 
   private readonly system: string;
 
-  constructor(opts: { callId: string; tools: AgentTool[]; system: string; channel: CallChannel; contextNote?: string }) {
+  constructor(opts: {
+    callId: string;
+    tools: AgentTool[];
+    system: string;
+    channel: CallChannel;
+    contextNote?: string;
+    /** Greeting already played to the caller (Twilio's welcomeGreeting), so the agent doesn't repeat it. */
+    greeting?: string;
+  }) {
     this.callId = opts.callId;
     this.system = opts.system;
     this.tools = opts.tools;
     this.toolsByName = new Map(opts.tools.map((t) => [t.name, t]));
     this.channel = opts.channel;
+    if (opts.greeting) {
+      bus.publish(this.callId, { type: "transcript", role: "agent", text: opts.greeting });
+      this.pending.push({
+        type: "text",
+        text: `[You have already greeted the caller with: "${opts.greeting}" Don't greet them again; respond to what they say next.]`,
+      });
+    }
     if (opts.contextNote) this.pending.push({ type: "text", text: `[${opts.contextNote}]` });
   }
 

@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import { agentSetup, CallSession } from "../agent/index.js";
+import { config } from "../config.js";
 import { bus } from "../events/bus.js";
 import { identifyCaller, identifyNote, type IdentifyResult } from "../halo/identify.js";
 import { verifyCallSid } from "./twiml.js";
@@ -100,6 +101,7 @@ async function startSession(callId: string, from: string | undefined, send: (obj
     tools,
     system,
     contextNote: identifyNote(from, ident),
+    greeting: config().WELCOME_GREETING,
     channel: {
       speak: (token, last) => send({ type: "text", token, last }),
       end: (handoff) => send({ type: "end", handoffData: JSON.stringify(handoff ?? {}) }),

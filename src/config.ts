@@ -40,7 +40,7 @@ const schema = z.object({
   TRANSCRIPTION_PROVIDER: z.string().default("Deepgram"),
   WELCOME_GREETING: z
     .string()
-    .default("Hi, you've reached the IT service desk. I'm the virtual assistant. How can I help today?"),
+    .default("Hello, thanks for contacting the IT support desk. I'm the virtual assistant. How can I help you today?"),
 
   COMPANY_NAME: z.string().default("Contoso"),
 });
