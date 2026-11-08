@@ -82,7 +82,7 @@ export function handleRelaySocket(ws: WebSocket, sig: string | undefined, log: (
 }
 
 async function startSession(callId: string, from: string | undefined, send: (obj: unknown) => void): Promise<CallSession> {
-  const { policy, tools } = await agentSetup();
+  const { policy, tools, system } = await agentSetup();
   // The welcome greeting is playing meanwhile, so this lookup is mostly hidden from the caller.
   const ident: IdentifyResult = await Promise.race([
     identifyCaller(from, policy),
@@ -98,6 +98,7 @@ async function startSession(callId: string, from: string | undefined, send: (obj
   return new CallSession({
     callId,
     tools,
+    system,
     contextNote: identifyNote(from, ident),
     channel: {
       speak: (token, last) => send({ type: "text", token, last }),

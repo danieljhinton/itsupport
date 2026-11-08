@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { classifyTool, collectTicketIds, type ToolPolicy } from "../src/agent/policy.js";
 import { buildAgentTools, compactResult } from "../src/agent/tools.js";
 import { echoContent, noteAllowed } from "../src/agent/session.js";
-import { extractUsers, phoneVariants } from "../src/halo/identify.js";
+import { extractUsers, phoneVariants, toE164 } from "../src/halo/identify.js";
 import { parseRelayMessage } from "../src/twilio/relay.js";
 import { signCallSid, verifyCallSid } from "../src/twilio/twiml.js";
 import policyFile from "../config/tool-policy.json" with { type: "json" };
@@ -14,20 +14,54 @@ const t = (name: string, readOnlyHint?: boolean) => ({
   inputSchema: { type: "object" as const, properties: { ticket_id: { type: "number" } } },
 });
 
+// The real Halo MCP catalogue (name + readOnlyHint) as listed on 2026-11-08.
+const haloCatalogue: [string, boolean][] = [
+  ["action_ticket", false], ["add_note_to_ticket", false], ["apply_suggestion", false], ["assign_to_me", false],
+  ["create_ticket", false], ["get_assets", true], ["get_assigned_tickets", true], ["get_clients", true],
+  ["get_knowledge", true], ["get_matches", false], ["get_one_article", true], ["get_one_asset", true],
+  ["get_one_client", true], ["get_one_site", true], ["get_one_ticket", true], ["get_one_user", true],
+  ["get_sites", true], ["get_user_info", true], ["get_users", true], ["log_service_request", false],
+  ["log_time", false], ["search_tickets", true],
+];
+
 describe("tool policy", () => {
-  it("allows reads, ticket creation and notes", () => {
-    expect(classifyTool(t("get_tickets"), policy).kind).toBe("read");
-    expect(classifyTool(t("search_kb_articles"), policy).kind).toBe("read");
-    expect(classifyTool(t("create_ticket"), policy).kind).toBe("create_ticket");
-    expect(classifyTool(t("add_action"), policy)).toEqual({ kind: "add_note", ticketIdArg: "ticket_id" });
+  it("exposes exactly the agreed Halo tools", () => {
+    const allowed = Object.fromEntries(
+      haloCatalogue.map(([n, ro]) => [n, classifyTool(t(n, ro), policy).kind]).filter(([, k]) => k !== "deny"),
+    );
+    expect(allowed).toEqual({
+      add_note_to_ticket: "add_note",
+      create_ticket: "create_ticket",
+      get_assets: "read",
+      get_clients: "read",
+      get_knowledge: "read",
+      get_one_article: "read",
+      get_one_asset: "read",
+      get_one_client: "read",
+      get_one_site: "read",
+      get_one_ticket: "read",
+      get_one_user: "read",
+      get_sites: "read",
+      get_users: "read",
+      search_tickets: "read",
+    });
   });
 
-  it("denies other writes even if they look like reads", () => {
-    expect(classifyTool(t("update_ticket"), policy).kind).toBe("deny");
-    expect(classifyTool(t("close_ticket"), policy).kind).toBe("deny");
-    expect(classifyTool(t("delete_asset"), policy).kind).toBe("deny");
-    expect(classifyTool(t("create_asset"), policy).kind).toBe("deny");
-    expect(classifyTool(t("get_and_update_thing"), policy).kind).toBe("deny");
+  it("denies writes and tools that describe the API account", () => {
+    for (const n of ["action_ticket", "apply_suggestion", "assign_to_me", "get_matches", "log_service_request", "log_time"]) {
+      expect(classifyTool(t(n, false), policy).kind).toBe("deny");
+    }
+    // Annotated read-only, but they describe the service account rather than the caller.
+    expect(classifyTool(t("get_user_info", true), policy).kind).toBe("deny");
+    expect(classifyTool(t("get_assigned_tickets", true), policy).kind).toBe("deny");
+    // Name-based safety nets for tools Halo might add later.
+    expect(classifyTool(t("update_ticket", true), policy).kind).toBe("deny");
+    expect(classifyTool(t("delete_asset", true), policy).kind).toBe("deny");
+    expect(classifyTool(t("close_ticket", true), policy).kind).toBe("deny");
+  });
+
+  it("has a ticket ID argument that matches the real add_note_to_ticket schema", () => {
+    expect(classifyTool(t("add_note_to_ticket", false), policy)).toEqual({ kind: "add_note", ticketIdArg: "ticket_id" });
   });
 
   it("falls back to the readOnly annotation for unmatched tools", () => {
@@ -37,7 +71,7 @@ describe("tool policy", () => {
   });
 
   it("hides denied tools from Claude and adds local tools", () => {
-    const names = buildAgentTools([t("update_ticket"), t("get_assets"), t("halo.tool/x", true)] as never, policy).map(
+    const names = buildAgentTools([t("update_ticket"), t("get_assets", true), t("halo.tool/x", true)] as never, policy).map(
       (x) => x.name,
     );
     expect(names).toEqual(["get_assets", "halo_tool_x", "end_call", "transfer_to_human"]);
@@ -61,9 +95,21 @@ describe("add_note guard", () => {
 });
 
 describe("caller identification helpers", () => {
-  it("builds AU phone variants", () => {
-    expect(phoneVariants("+61412345678")).toEqual(["+61412345678", "0412345678", "61412345678"]);
-    expect(phoneVariants("0412 345 678")).toEqual(["0412345678", "+61412345678"]);
+  it("normalises AU numbers to E.164", () => {
+    expect(toE164("+61 3 9561 7232")).toBe("+61395617232");
+    expect(toE164("(03) 9561 7232")).toBe("+61395617232");
+    expect(toE164("0412 345 678")).toBe("+61412345678");
+    expect(toE164("61412345678")).toBe("+61412345678");
+  });
+
+  it("builds the spaced formats Halo's substring search matches", () => {
+    // Landline, as stored in Halo: "+61 3 9561 7232"
+    expect(phoneVariants("+61395617232")).toEqual([
+      "+61395617232", "+61 3 9561 7232", "03 9561 7232", "0395617232", "9561 7232",
+    ]);
+    expect(phoneVariants("+61412345678")).toEqual([
+      "+61412345678", "+61 412 345 678", "0412 345 678", "0412345678", "345 678",
+    ]);
     expect(phoneVariants("")).toEqual([]);
   });
 

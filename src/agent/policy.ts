@@ -16,6 +16,8 @@ const policySchema = z.object({
     )
     .default([]),
   identify: z.object({ tool: z.string(), args: z.record(z.string(), z.unknown()) }).optional(),
+  /** Instance-specific tips appended to the system prompt (how this Halo's tools behave). */
+  promptNotes: z.array(z.string()).default([]),
 });
 
 export type ToolPolicy = z.infer<typeof policySchema>;

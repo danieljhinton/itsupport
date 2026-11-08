@@ -3,28 +3,35 @@
     "Controls which Halo MCP tools the voice agent can use. Rules are checked in order; first match wins.",
     "kind: read | create_ticket | add_note | deny. 'match' is a tool name or a glob (* wildcard), case-insensitive.",
     "Tools that match no rule are allowed only if the MCP server marks them readOnlyHint=true (and allowReadOnlyAnnotated is true).",
-    "Run `npm run list-tools` against your Halo instance and adjust the names below to match.",
+    "Matched to the dhinternalitsm Halo MCP catalogue (22 tools) on 2026-11-08. Re-check with `npm run list-tools` if Halo adds tools.",
     "Write policy agreed for the PoC: create tickets + add notes to the caller's own tickets. Nothing else."
   ],
   "allowReadOnlyAnnotated": true,
   "rules": [
+    { "match": "create_ticket", "kind": "create_ticket" },
+    { "match": "add_note_to_ticket", "kind": "add_note", "ticketIdArg": "ticket_id" },
+
+    { "match": "get_user_info", "kind": "deny", "_why": "Describes the API account, not the caller" },
+    { "match": "get_assigned_tickets", "kind": "deny", "_why": "Tickets assigned to the API account, not the caller's" },
+    { "match": "action_ticket", "kind": "deny", "_why": "Arbitrary ticket actions (close, escalate...)" },
+    { "match": "apply_suggestion", "kind": "deny" },
+    { "match": "assign_to_me", "kind": "deny" },
+    { "match": "get_matches", "kind": "deny", "_why": "Refreshes matches on a ticket (a write)" },
+    { "match": "log_service_request", "kind": "deny" },
+    { "match": "log_time", "kind": "deny" },
     { "match": "*delete*", "kind": "deny" },
     { "match": "*update*", "kind": "deny" },
-    { "match": "*close*", "kind": "deny" },
-    { "match": "*asset*create*", "kind": "deny" },
-    { "match": "*create*asset*", "kind": "deny" },
-    { "match": "*create*user*", "kind": "deny" },
-    { "match": "*create*ticket*", "kind": "create_ticket" },
-    { "match": "*add*action*", "kind": "add_note", "ticketIdArg": "ticket_id" },
-    { "match": "*add*note*", "kind": "add_note", "ticketIdArg": "ticket_id" },
-    { "match": "get_*", "kind": "read" },
-    { "match": "list_*", "kind": "read" },
-    { "match": "search_*", "kind": "read" },
-    { "match": "find_*", "kind": "read" }
+    { "match": "*close*", "kind": "deny" }
   ],
   "identify": {
-    "_readme": "Optional pre-call caller lookup. {phone} is replaced with each phone variant (E.164 and local 0... form). Delete this block to let the agent identify the caller itself.",
-    "tool": "search_users",
+    "_readme": "Pre-call caller lookup. {phone} is replaced with each phone format (E.164, spaced AU formats); hits are kept only if the user's stored number equals the caller's. Delete this block to let the agent identify the caller itself.",
+    "tool": "get_users",
     "args": { "search": "{phone}" }
-  }
+  },
+  "promptNotes": [
+    "Find the caller's tickets with search_tickets, searching by their email address with open_only set to true. Use get_one_ticket for a ticket's history.",
+    "Assets in this Halo instance are not linked to users. To find the caller's device, ask for the asset tag on the sticker (for example ABC00001) or the model, then use get_assets with that as the search term.",
+    "Search the knowledge base with get_knowledge using a few key words from the symptoms, then get_one_article for the full steps.",
+    "create_ticket takes the caller's email address, a summary of 70 characters or less, and a description. Leave ticket_type blank. Tickets can't be closed from the phone, so for an issue fixed on the call, start the summary with 'Resolved on call:' and say in the description that it was resolved and can be closed."
+  ]
 }

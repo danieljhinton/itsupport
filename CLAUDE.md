@@ -42,22 +42,34 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 
 ## Status / open items
 - [x] Plan approved; scaffold + config
-- [x] Halo auth + MCP client + tool policy; **real Halo MCP tool names not yet confirmed**. Run `npm run list-tools` against the instance and update `config/tool-policy.json`
-- [x] Agent session + prompt + tools; chat CLI (not yet run against live Halo)
-- [x] Twilio TwiML + relay (smoke-tested locally; not yet on a real call)
+- [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** (22 tools) and tested live
+- [x] Agent session + prompt + tools; chat CLI (not yet run end to end: needs ANTHROPIC_API_KEY)
+- [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
-- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 13 passing)
-- [x] Browser calling from the dashboard (smoke-tested: token, TwiML params, scripts; not yet on a real Twilio account)
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 15 passing)
 
-### Next steps (need the user's credentials / accounts)
-1. Fill `.env` with real Halo, Anthropic and Twilio values.
-2. `npm run list-tools` → adjust `config/tool-policy.json` rule names, `ticketIdArg` and the `identify` tool to the real Halo MCP tool names.
-3. `npm run chat` through the demo scenarios in README; tune `src/agent/prompt.ts`.
-4. Browser calling: create a Twilio API key + TwiML App (Voice URL `{PUBLIC_URL}/twiml`), set `TWILIO_API_KEY_SID/SECRET`, `TWILIO_TWIML_APP_SID`, `DEMO_CALLER_NUMBER` → click **Call the agent** on the dashboard (latency, barge-in).
-5. Later: Twilio AU Regulatory Bundle → buy number → `npm run setup:twilio` → real phone call test. No code changes needed.
+### Environment (user's setup, 2026-11-08)
+- Halo (QA instance): `https://dhinternalitsm.itsm.haloqa.co.uk`, MCP at `/api/mcp`, auth at `/auth`. Client-credentials auth works.
+- ngrok static domain: `https://mutiny-seldom-produce.ngrok-free.dev` (= `PUBLIC_URL`; the TwiML App "Halo" points at `/twiml`). The user's ngrok is older: use `--domain=`, or update for `--url=`.
+- Twilio: full (paid) account; API key "API1"; TwiML App "Halo".
+- Demo caller: **Brenda Ross**, `+61 3 9561 7232` (E.164 `+61395617232`, set as `DEMO_CALLER_NUMBER`); has open ticket #3143 (VPN auth failure). Good for the "existing ticket → add note" scenario.
+
+### Halo MCP findings (this instance)
+- Tools carry accurate `readOnlyHint` annotations; the policy relies on them, plus explicit rules. Allowed: `create_ticket`, `add_note_to_ticket` (ticket_id), and the read-only tools except `get_user_info` / `get_assigned_tickets` (these describe the API account, not the caller). Denied: `action_ticket`, `apply_suggestion`, `assign_to_me`, `get_matches` (refresh = write), `log_service_request`, `log_time`.
+- `get_users` search is a **substring match on the stored, formatted phone** ("+61 3 9561 7232"); unspaced E.164 doesn't match. `identify.ts` tries spaced AU formats, then keeps only users whose number normalises to the caller's E.164.
+- Results look like `{page_no, page_size, record_count, total_pages, results:[...]}`, with a `link` on each record. Ticket URLs are `/ticket?id=N` (not `/tickets`).
+- `search_tickets` works by the user's name or email (`open_only: true`). **Assets aren't linked to users** (`get_assets` by user name → none); the agent asks for the asset tag instead.
+- `create_ticket` takes `user_email, summary (≤70 chars), description, ticket_type?`, with **no status field**, so "resolved on call" tickets are created open with a "Resolved on call:" prefix. Closing would need `action_ticket`, which is denied (open question for the user).
+- Instance-specific guidance lives in `config/tool-policy.json › promptNotes` (appended to the system prompt).
+
+### Next steps
+1. User adds `ANTHROPIC_API_KEY` to `.env`.
+2. `npm run chat -- --from +61395617232` through the README demo scenarios; tune `src/agent/prompt.ts` / `promptNotes`.
+3. Browser call from the dashboard (latency, barge-in).
+4. Later: AU Regulatory Bundle → buy number → `npm run setup:twilio`. No code changes needed.
 
 ### Known limitations / ideas
 - The end-of-call hang-up waits an estimated TTS duration (~70 ms/char) before sending `{type:"end"}`.
 - `transfer_to_human` is a stub (logs to the dashboard; it could use a TwiML `<Dial>` via `handoffData` + action URL).
-- Ticket IDs for the add_note guard are found heuristically in tool results (`policy.ts › collectTicketIds`). Check this against real Halo result shapes.
+- The add_note guard collects ticket IDs from results of tools with "ticket" in the name (`id` keys) and from any `ticket_id` key. That fits the real result shapes.
 - Sessions and dashboard history are in memory only.

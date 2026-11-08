@@ -3,7 +3,6 @@ import { config } from "../config.js";
 import { bus } from "../events/bus.js";
 import { callHaloTool } from "../halo/mcp.js";
 import { collectTicketIds } from "./policy.js";
-import { systemPrompt } from "./prompt.js";
 import { compactResult, LOCAL_TOOLS, type AgentTool } from "./tools.js";
 
 type MessageParam = Anthropic.Beta.Messages.BetaMessageParam;
@@ -52,8 +51,11 @@ export class CallSession {
   /** Tickets seen or created on this call; add_note is limited to these. */
   private knownTickets = new Set<string>();
 
-  constructor(opts: { callId: string; tools: AgentTool[]; channel: CallChannel; contextNote?: string }) {
+  private readonly system: string;
+
+  constructor(opts: { callId: string; tools: AgentTool[]; system: string; channel: CallChannel; contextNote?: string }) {
     this.callId = opts.callId;
+    this.system = opts.system;
     this.tools = opts.tools;
     this.toolsByName = new Map(opts.tools.map((t) => [t.name, t]));
     this.channel = opts.channel;
@@ -144,7 +146,7 @@ export class CallSession {
         fallbacks: "default",
         output_config: { effort: cfg.CLAUDE_EFFORT },
         cache_control: { type: "ephemeral" },
-        system: systemPrompt(),
+        system: this.system,
         tools: this.tools.map((t) => t.definition),
         messages: this.history,
       },
@@ -278,7 +280,8 @@ export class CallSession {
       type: "ticket",
       action,
       ticketId,
-      url: web && ticketId ? `${web}/tickets?id=${ticketId}` : undefined,
+      // Prefer the link Halo returns; otherwise build Halo's ticket URL (/ticket?id=N).
+      url: typeof obj?.link === "string" ? obj.link : web && ticketId ? `${web}/ticket?id=${ticketId}` : undefined,
     });
   }
 

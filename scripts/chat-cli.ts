@@ -12,7 +12,7 @@ import { closeHalo } from "../src/halo/mcp.js";
 const fromIdx = process.argv.indexOf("--from");
 const from = fromIdx > 0 ? process.argv[fromIdx + 1] : undefined;
 
-const { policy, tools } = await agentSetup();
+const { policy, tools, system } = await agentSetup();
 console.log(`Loaded ${tools.length} tools: ${tools.map((t) => `${t.name}(${t.policy.kind})`).join(", ")}\n`);
 
 const ident = await identifyCaller(from, policy);
@@ -36,6 +36,7 @@ bus.publish(callId, { type: "call_started", from, channel: "cli" });
 const session = new CallSession({
   callId,
   tools,
+  system,
   contextNote: identifyNote(from, ident),
   channel: {
     speak(token, last) {
