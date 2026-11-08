@@ -20,7 +20,15 @@ export interface CallChannel {
 }
 
 const MAX_TOOL_ROUNDS = 10;
-const BETAS: Anthropic.Beta.AnthropicBeta[] = ["server-side-fallback-2026-07-01"];
+/**
+ * Server-side refusal fallback (`fallbacks: "default"`), only on models that support it.
+ * Haiku 5.5 (and older models) have none, so the request is sent without it.
+ */
+export function fallbackParams(model: string): { betas?: Anthropic.Beta.AnthropicBeta[]; fallbacks?: "default" } {
+  return /^claude-(opus-5|fable-5-1|mythos-5-1|sonnet-5-5)/.test(model)
+    ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" }
+    : {};
+}
 
 let anthropic: Anthropic | undefined;
 const client = () => (anthropic ??= new Anthropic());
@@ -144,8 +152,7 @@ export class CallSession {
       {
         model: cfg.CLAUDE_MODEL,
         max_tokens: 8000,
-        betas: BETAS,
-        fallbacks: "default",
+        ...fallbackParams(cfg.CLAUDE_MODEL),
         output_config: { effort: cfg.CLAUDE_EFFORT },
         cache_control: { type: "ephemeral" },
         system: this.system,

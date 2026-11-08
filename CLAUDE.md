@@ -8,7 +8,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 ## Agreed decisions (from planning, 2026-11-08)
 - **Stack:** Node.js + TypeScript (ESM, `tsx` to run, `tsc --noEmit` to typecheck), Fastify, `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, `twilio`, `zod`, `vitest`.
 - **Voice:** Twilio **ConversationRelay**. Twilio does STT and TTS; our server exchanges text over a websocket at `/relay`. Language `en-AU`.
-- **LLM:** Claude via the Anthropic API. Model comes from env `CLAUDE_MODEL` (default `claude-opus-5-5`, effort `low` for latency). Thinking can't be disabled on Opus 5.5; effort is the latency control. Server-side refusal fallback is on (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`).
+- **LLM:** Claude via the Anthropic API. Model comes from env `CLAUDE_MODEL` (default `claude-opus-5-5`, effort `low` for latency). Thinking can't be disabled on Opus 5.5; effort is the latency control. Server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`) is sent only for models that support it (`fallbackParams()` in `session.ts`); Haiku 5.5 has none. **User switched `.env` to `CLAUDE_MODEL=claude-haiku-5-5` (2026-11-08)** for speed/cost; first token ~1.3 s, ~4 s with two KB searches.
 - **Halo MCP:** hosted Halo MCP endpoint, authenticated with Halo **API client credentials** (OAuth `client_credentials`). The app is the MCP client (client-side MCP, *not* Anthropic's MCP connector), so it can enforce the tool allowlist, send calls to the dashboard and trim results.
 - **Caller identification:** caller ID lookup in Halo first; if there's no match or more than one, the agent asks for name/email.
 - **Halo write policy:** the agent may (1) create tickets: open if unresolved, closed if resolved on the call (for reporting); (2) add notes to the caller's existing tickets. **No other writes.** Enforced in code by `config/tool-policy.json` plus `src/agent/tools.ts` / `session.ts`: policy kinds `create_ticket`, `add_note` (tickets seen on this call), `close_ticket` (only tickets *created* on this call), and `omitArgs` (hidden + stripped args, e.g. `status` on a note tool). Read-only tools are allowed when the MCP tool is annotated `readOnlyHint` or listed as `read`.
@@ -43,7 +43,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 ## Status / open items
 - [x] Plan approved; scaffold + config
 - [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** and tested live (now the Virtual Agent endpoint, 12 `CF_` tools)
-- [x] Agent session + prompt + tools; chat CLI (not yet run end to end: needs ANTHROPIC_API_KEY)
+- [x] Agent session + prompt + tools; chat CLI, run end to end on Haiku 5.5 (KB question answered from CF_search_knowledge_base)
 - [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
 - [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 17 passing)
@@ -66,7 +66,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - Instance-specific guidance lives in `config/tool-policy.json › promptNotes`.
 
 ### Next steps
-1. User adds `ANTHROPIC_API_KEY` to `.env`.
+1. ~~User adds `ANTHROPIC_API_KEY`~~ (done).
 2. `npm run chat -- --from +61395617232` through the README demo scenarios; tune `src/agent/prompt.ts` / `promptNotes`.
 3. Browser call from the dashboard (latency, barge-in).
 4. Later: AU Regulatory Bundle → buy number → `npm run setup:twilio`. No code changes needed.
