@@ -1,0 +1,45 @@
+{
+  "name": "halo-voice-agent",
+  "version": "0.1.0",
+  "description": "PoC: Twilio ConversationRelay voice agent for HaloITSM using Claude and the Halo MCP server",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "list-tools": "tsx scripts/list-halo-tools.ts",
+    "chat": "tsx scripts/chat-cli.ts",
+    "setup:twilio": "tsx scripts/setup-twilio.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danieljhinton/itsupport.git"
+  },
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/danieljhinton/itsupport/issues"
+  },
+  "homepage": "https://github.com/danieljhinton/itsupport#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "@fastify/formbody": "^9.0.1",
+    "@fastify/static": "^10.1.10",
+    "@fastify/websocket": "^11.3.7",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "dotenv": "^18.0.9",
+    "fastify": "^5.12.8",
+    "twilio": "^6.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
