@@ -1,6 +1,5 @@
 import type { ToolPolicy } from "../agent/policy.js";
 import { callHaloTool } from "./mcp.js";
-import { searchUsersRest } from "./rest.js";
 
 export type IdentifyResult =
   | { status: "matched"; user: Record<string, unknown> }
@@ -103,7 +102,7 @@ export async function identifyCaller(from: string | undefined, policy: ToolPolic
       if (seen.size > 0) break;
     }
     const users = [...seen.values()];
-    if (users.length === 1) return { status: "matched", user: await withContact(users[0], target) };
+    if (users.length === 1) return { status: "matched", user: users[0] };
     if (users.length > 1) return { status: "ambiguous", candidates: users.slice(0, 5) };
     return { status: "none" };
   } catch (err) {
@@ -118,24 +117,6 @@ export function contactOf(u: Record<string, unknown>): { name?: string; email?: 
     return hit ? (hit[1] as string) : undefined;
   };
   return { name: pick(/^(name|user|full_?name)$/i), email: pick(/^(email|emailaddress|email_address)$/i) };
-}
-
-/**
- * Some lookup tools (e.g. CF_retrieve_users) return only name and phone. Fill in the email
- * and Halo user id from the REST API, keeping only a record whose own phone is the caller's.
- * Best effort: on any failure the match is returned unchanged and the agent asks for the email.
- */
-async function withContact(u: Record<string, unknown>, target: string): Promise<Record<string, unknown>> {
-  const { name, email } = contactOf(u);
-  if (email || !name) return u;
-  try {
-    const hits = (await searchUsersRest(name)).filter((r) => userPhones(r).some((p) => toE164(p) === target));
-    if (hits.length !== 1) return u;
-    const extra = contactOf(hits[0]);
-    return { ...u, ...(hits[0].id !== undefined ? { user_id: hits[0].id } : {}), ...(extra.email ? { email: extra.email } : {}) };
-  } catch {
-    return u;
-  }
 }
 
 /** First-turn context note for the model. */
