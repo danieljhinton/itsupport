@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halo Voice Agent</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1b1f24; --muted: #667085; --line: #e3e6eb;
+    --accent: #2563eb; --caller: #eef2ff; --agent: #f1f5f9; --ok: #15803d; --err: #b91c1c;
+    --read: #0369a1; --write: #b45309; --ticket-bg: #ecfdf5; --ticket-line: #34d399;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --ink: #e6e8eb; --muted: #8b95a3; --line: #262c35;
+      --accent: #60a5fa; --caller: #1e2540; --agent: #1d232b; --ok: #4ade80; --err: #f87171;
+      --read: #38bdf8; --write: #fbbf24; --ticket-bg: #0f2a20; --ticket-line: #10b981;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  #conn { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  #conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--err); display: inline-block; }
+  #conn.live i { background: var(--ok); }
+  main { display: grid; grid-template-columns: 230px 1fr 1fr; gap: 16px; padding: 16px 20px; height: calc(100vh - 56px); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; min-height: 0; }
+  section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .scroll { overflow-y: auto; padding: 12px 14px; flex: 1; }
+  .call { padding: 10px; border-radius: 8px; cursor: pointer; margin-bottom: 6px; border: 1px solid transparent; }
+  .call:hover { background: var(--agent); }
+  .call.sel { border-color: var(--accent); background: var(--agent); }
+  .call b { display: block; font-size: 14px; }
+  .call small { color: var(--muted); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .call.ended .dot { background: var(--muted); }
+  .msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; margin: 6px 0; white-space: pre-wrap; }
+  .msg.caller { background: var(--caller); margin-left: auto; border-bottom-right-radius: 4px; }
+  .msg.agent { background: var(--agent); border-bottom-left-radius: 4px; }
+  .msg.interrupted { opacity: .65; }
+  .msg .who { font-size: 11px; color: var(--muted); display: block; margin-bottom: 2px; }
+  .note { color: var(--muted); font-size: 12.5px; text-align: center; margin: 8px 0; }
+  .tool { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .tool summary { list-style: none; cursor: pointer; padding: 9px 12px; display: flex; gap: 8px; align-items: center; }
+  .tool summary::-webkit-details-marker { display: none; }
+  .tool .name { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .badge { font-size: 10.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: .04em; }
+  .badge.read { color: var(--read); } .badge.create_ticket, .badge.add_note { color: var(--write); } .badge.unknown { color: var(--muted); }
+  .tool .meta { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .tool .meta.err { color: var(--err); } .tool .meta.ok { color: var(--ok); }
+  .tool pre { margin: 0; padding: 10px 12px; font: 12px/1.45 var(--mono); background: var(--agent); border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
+  .tool pre .lbl { color: var(--muted); }
+  .ticket { border: 1px solid var(--ticket-line); background: var(--ticket-bg); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-weight: 600; }
+  .ticket a { color: var(--accent); }
+  .empty { color: var(--muted); text-align: center; margin-top: 40px; font-size: 14px; }
+  .ident { font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; height: auto; padding: 12px 16px; }
+    section { max-height: 70vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Halo Voice Agent</h1>
+    <div class="sub">Live calls · Claude + HaloITSM MCP</div>
+  </div>
+  <div id="conn"><i></i><span>connecting</span></div>
+</header>
+<main>
+  <section><h2>Calls</h2><div class="scroll" id="calls"><div class="empty">Waiting for a call…</div></div></section>
+  <section><h2><span>Conversation</span><span class="ident" id="ident"></span></h2><div class="scroll" id="transcript"></div></section>
+  <section><h2><span>Halo MCP activity</span><span id="toolcount"></span></h2><div class="scroll" id="tools"></div></section>
+</main>
+<script>
+(() => {
+  const calls = new Map(); // callId -> {meta, events: []}
+  let selected = null;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmt = (v) => esc(typeof v === "string" ? v : JSON.stringify(v, null, 2));
+  const time = (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  function onEvent(e) {
+    let c = calls.get(e.callId);
+    if (!c) { c = { id: e.callId, started: e.ts, from: null, ended: false, events: [], user: null }; calls.set(e.callId, c); }
+    c.events.push(e);
+    if (e.type === "call_started") { c.from = e.from; c.channel = e.channel; }
+    if (e.type === "caller_identified" && e.user) c.user = e.user;
+    if (e.type === "call_ended") c.ended = true;
+    // Follow the newest call unless the viewer is watching another live one.
+    if (!selected || (e.type === "call_started" && calls.get(selected)?.ended !== false)) selected = e.callId;
+    render();
+  }
+
+  function userName(u) {
+    if (!u || typeof u !== "object") return null;
+    return u.name || [u.firstname, u.surname].filter(Boolean).join(" ") || u.emailaddress || u.email || null;
+  }
+
+  function render() {
+    const list = [...calls.values()].sort((a, b) => b.started - a.started);
+    $("calls").innerHTML = list.length ? list.map((c) => `
+      <div class="call ${c.id === selected ? "sel" : ""} ${c.ended ? "ended" : ""}" data-id="${esc(c.id)}">
+        <b><span class="dot"></span>${esc(userName(c.user) || c.from || (c.channel === "cli" ? "Terminal test" : "Unknown caller"))}</b>
+        <small>${time(c.started)} · ${c.ended ? "ended" : "live"}</small>
+      </div>`).join("") : `<div class="empty">Waiting for a call…</div>`;
+    const c = calls.get(selected);
+    if (!c) return;
+
+    const t = [];
+    const tools = [];
+    const results = new Map(c.events.filter((e) => e.type === "tool_result").map((e) => [e.id, e]));
+    let calls_ = 0;
+    for (const e of c.events) {
+      if (e.type === "transcript") t.push(`<div class="msg ${e.role} ${e.interrupted ? "interrupted" : ""}"><span class="who">${e.role === "caller" ? "Caller" : "Agent"}${e.interrupted ? " · interrupted" : ""}</span>${esc(e.text)}</div>`);
+      else if (e.type === "call_started") t.push(`<div class="note">Call ${e.from ? "from " + esc(e.from) : "started"} · ${time(e.ts)}</div>`);
+      else if (e.type === "caller_identified") t.push(`<div class="note">Caller lookup: ${esc(e.status)}${userName(e.user) ? " → " + esc(userName(e.user)) : ""}</div>`);
+      else if (e.type === "status") t.push(`<div class="note">${esc(e.message)}</div>`);
+      else if (e.type === "call_ended") t.push(`<div class="note">Call ended${e.outcome ? " · " + esc(e.outcome) : ""}${e.summary ? " · " + esc(e.summary) : ""}</div>`);
+      else if (e.type === "ticket") tools.push(`<div class="ticket">${e.action === "created" ? "Ticket created" : "Note added to ticket"} ${e.ticketId ? "#" + esc(e.ticketId) : ""} ${e.url ? `· <a href="${esc(e.url)}" target="_blank" rel="noopener">open in Halo</a>` : ""}</div>`);
+      else if (e.type === "tool_call") {
+        calls_++;
+        const r = results.get(e.id);
+        const meta = r ? `<span class="meta ${r.ok ? "ok" : "err"}">${r.ok ? "✓" : "✕"} ${r.ms} ms</span>` : `<span class="meta">running…</span>`;
+        tools.push(`<details class="tool" data-id="${esc(e.id)}" ${openTools.has(e.id) ? "open" : ""}><summary><span class="name">${esc(e.tool)}</span><span class="badge ${esc(e.kind)}">${esc(e.kind === "read" ? "read" : e.kind.replace("_", " "))}</span>${meta}</summary>
+          <pre><span class="lbl">input</span>\n${fmt(e.input)}${r ? `\n\n<span class="lbl">result</span>\n${fmt(r.result)}` : ""}</pre></details>`);
+      }
+    }
+    const tEl = $("transcript"), toolEl = $("tools");
+    const stick = (el) => el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    const st = stick(tEl);
+    tEl.innerHTML = t.join("") || `<div class="empty">No conversation yet</div>`;
+    toolEl.innerHTML = tools.reverse().join("") || `<div class="empty">No Halo calls yet</div>`;
+    $("toolcount").textContent = calls_ ? `${calls_} call${calls_ === 1 ? "" : "s"}` : "";
+    $("ident").textContent = userName(c.user) ? `Caller: ${userName(c.user)}` : "";
+    if (st) tEl.scrollTop = tEl.scrollHeight;
+  }
+
+  // Remember which tool cards are expanded across re-renders.
+  const openTools = new Set();
+  $("tools").addEventListener("toggle", (ev) => {
+    const d = ev.target;
+    if (d.dataset?.id) d.open ? openTools.add(d.dataset.id) : openTools.delete(d.dataset.id);
+  }, true);
+
+  $("calls").addEventListener("click", (ev) => {
+    const el = ev.target.closest(".call");
+    if (el) { selected = el.dataset.id; render(); }
+  });
+
+  const qs = location.search;
+  // The server replays recent history on every (re)connect, so start fresh each time.
+  const es = new EventSource("/events" + qs);
+  es.onopen = () => { calls.clear(); $("conn").className = "live"; $("conn").lastChild.textContent = "live"; };
+  es.onerror = () => { $("conn").className = ""; $("conn").lastChild.textContent = "reconnecting"; };
+  es.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch (err) { console.error(err); } };
+})();
+</script>
+</body>
+</html>

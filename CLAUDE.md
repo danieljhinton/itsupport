@@ -42,6 +42,6 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - [x] Plan approved; scaffold + config
 - [x] Halo auth + MCP client + tool policy; **real Halo MCP tool names not yet confirmed**. Run `npm run list-tools` against the instance and update `config/tool-policy.json`
 - [x] Agent session + prompt + tools; chat CLI (not yet run against live Halo)
-- [ ] Twilio TwiML + relay
-- [ ] Dashboard
+- [x] Twilio TwiML + relay (smoke-tested locally; not yet on a real call)
+- [x] Dashboard
 - [ ] README, Dockerfile, tests
