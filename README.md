@@ -23,7 +23,7 @@ Caller ── PSTN ──▶ Twilio AU number ── webhook ──▶ POST /twi
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22.12+
 - An **Anthropic API key**
 - A **HaloITSM** instance with the MCP server enabled, and an API application using client credentials
 - A **Twilio** account with an Australian voice number (see below)
