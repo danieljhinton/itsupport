@@ -4,39 +4,39 @@
     "kind: read | create_ticket | add_note | close_ticket | deny. 'match' is a tool name or a glob (* wildcard), case-insensitive.",
     "ticketIdArg names the ticket ID parameter (add_note, close_ticket). omitArgs are hidden from Claude and stripped before the call.",
     "Tools that match no rule are allowed only if the MCP server marks them readOnlyHint=true (and allowReadOnlyAnnotated is true).",
-    "Matched to the dhinternalitsm Halo Virtual Agent MCP catalogue (12 CF_ tools) on 2026-11-08. Re-check with `npm run list-tools` if the endpoint changes.",
-    "Write policy agreed for the PoC: create tickets, add notes to the caller's own tickets, and close a ticket created on this call when the issue was resolved on the call. Nothing else."
+    "Matched to the generic Halo MCP catalogue (/api/mcp, 23 tools incl. CF_email_user) on dhitsminternal.app.usehalo.com on 2026-11-17. Re-check with `npm run list-tools` if the endpoint changes.",
+    "Write policy agreed for the PoC: create tickets and add notes to the caller's own tickets. This tool set has no safe close tool (only action_ticket, which runs any action), so tickets resolved on the call stay open with a 'Resolved on call:' summary."
   ],
   "allowReadOnlyAnnotated": true,
   "rules": [
-    { "match": "CF_log_incident", "kind": "create_ticket" },
-    {
-      "match": "CF_add_note", "kind": "add_note", "ticketIdArg": "ticket_id", "omitArgs": ["status", "time_taken"],
-      "_why": "Notes only: the status field could change any ticket's status, so it is hidden and stripped"
-    },
-    {
-      "match": "CF_close_ticket", "kind": "close_ticket", "ticketIdArg": "ticket_id", "omitArgs": ["time_taken"],
-      "_why": "Only tickets created on this call (resolved on the call); enforced in session.ts"
-    },
-    { "match": "CF_search_services", "kind": "read", "_why": "A catalogue search; not annotated read-only, but it changes nothing" },
+    { "match": "create_ticket", "kind": "create_ticket" },
+    { "match": "add_note_to_ticket", "kind": "add_note", "ticketIdArg": "ticket_id", "_why": "Public note; limited in code to tickets seen on this call" },
 
-    { "match": "CF_retrieve_users", "kind": "deny", "_why": "Lists every user's name and phone; used only by the pre-call lookup below" },
+    { "match": "get_user_info", "kind": "deny", "_why": "Describes the API account, not the caller" },
+    { "match": "get_assigned_tickets", "kind": "deny", "_why": "Tickets assigned to the API account, not the caller's" },
+    { "match": "action_ticket", "kind": "deny", "_why": "Arbitrary ticket actions (close, escalate...)" },
+    { "match": "CF_email_user", "kind": "deny", "_why": "Emails the end user and takes a status that could change the ticket" },
+    { "match": "apply_suggestion", "kind": "deny" },
+    { "match": "assign_to_me", "kind": "deny" },
+    { "match": "get_matches", "kind": "deny", "_why": "Refreshes matches on a ticket (a write)" },
+    { "match": "log_service_request", "kind": "deny", "_why": "Not annotated read-only; the agent can't fill in a catalogue request by phone" },
+    { "match": "log_time", "kind": "deny" },
     { "match": "*delete*", "kind": "deny" },
     { "match": "*update*", "kind": "deny" },
     { "match": "*close*", "kind": "deny" }
   ],
   "identify": {
-    "_readme": "Pre-call caller lookup. {phone} in args is replaced with each phone format; with no {phone}, the tool is treated as a full user list and called once. Hits are kept only if the user's stored number equals the caller's. Delete this block to let the agent identify the caller itself.",
-    "tool": "CF_retrieve_users",
-    "args": {}
+    "_readme": "Pre-call caller lookup. {phone} is replaced with each phone format (E.164, spaced AU formats); hits are kept only if the user's stored number equals the caller's. Delete this block to let the agent identify the caller itself.",
+    "tool": "get_users",
+    "args": { "search": "{phone}" }
   },
   "promptNotes": [
     "Use the email from the caller lookup as user_email. Only ask the caller for their email if the lookup didn't provide one.",
-    "Ticket search here is unreliable and often finds nothing. Ask the caller for the ticket number if they have one and use CF_get_one_ticket. Otherwise try CF_search_tickets with a few words describing the issue and open_only set to true. Only discuss or add notes to a ticket whose user_name matches the caller.",
-    "Assets in this Halo instance are not linked to users. To find the caller's device, ask for the asset tag on the sticker (for example ABC00001) or the model, then use CF_search_assets with that as the search term. Pass its id as asset_id when logging a ticket.",
-    "Search the knowledge base with CF_search_knowledge_base using a few key words from the symptoms. The results include the resolution steps; use CF_get_one_article only if you need more.",
-    "CF_log_incident needs user_email, a summary of 70 characters or less, a description, CFimpact (usually Single User Affected), CFurgency (usually Medium; High if the caller cannot work) and the closest category_1 from the list.",
-    "If the issue was fixed on the call, log the ticket with CF_log_incident, describing what fixed it, then close that ticket with CF_close_ticket. You can only close a ticket you created on this call.",
-    "CF_add_note adds a private note to a ticket. It cannot change the ticket's status."
+    "Find the caller's tickets with search_tickets, searching by their email address or name with open_only set to true, or by the ticket number if they have one. Use get_one_ticket for a ticket's history. Only discuss or add notes to a ticket that belongs to the caller.",
+    "To find the caller's device, try get_assets with their name. If that finds nothing, ask for the asset tag on the sticker or the model and search with that.",
+    "Search the knowledge base with get_knowledge using a few key words from the symptoms, then get_one_article for the full steps.",
+    "create_ticket takes the caller's email address, a summary of 70 characters or less, and a description. Leave ticket_type blank.",
+    "Tickets can't be closed from the phone. For an issue fixed on the call, still log a ticket, start the summary with 'Resolved on call:' and say in the description what fixed it and that it can be closed.",
+    "add_note_to_ticket adds a public note that the caller can see. Write it as a short, polite update in plain words."
   ]
 }

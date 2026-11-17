@@ -43,21 +43,29 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 
 ## Status / open items
 - [x] Plan approved; scaffold + config
-- [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** and tested live (now the Virtual Agent endpoint, 12 `CF_` tools)
+- [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** and tested live (old instance: generic, then Virtual Agent `CF_` tools)
+- [ ] New instance (2026-11-17): policy matched to its generic `/api/mcp` catalogue; user to run `npm run chat` to check it end to end
 - [x] Agent session + prompt + tools; chat CLI, run end to end on Haiku 5.5. User ran the demo scenarios (incl. ticket logging) and reports it works well
 - [x] Real phone calls to the AU number through ngrok (user confirmed 2026-11-08)
 - [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
-- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 18 passing)
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 20 passing)
 
 ### Environment (user's setup, 2026-11-08)
-- **Halo instance changed (2026-11-17) to `https://dhitsminternal.app.usehalo.com`** (auth at `/auth`, assumed). Still to confirm on the new instance: API client credentials, the MCP endpoint (Virtual Agent ID or `/api/mcp`), the tool catalogue (`npm run list-tools` → `config/tool-policy.json`, which is matched to the old `CF_` tools), and the demo caller/ticket below. The notes below are about the old instance until re-checked.
+- **Halo (since 2026-11-17): `https://dhitsminternal.app.usehalo.com`**, auth at `/auth` (client credentials work after a new API application was made; the first attempt failed with `invalid_client`, most likely a truncated secret). MCP endpoint: the **generic `/api/mcp`** (23 tools: the 22 generic ones plus `CF_email_user`), policy `config/tool-policy.json`. Not yet checked live on this instance: caller lookup by phone (`get_users`), `search_tickets`, whether assets are linked to users, `create_ticket` result shape, and the demo caller/ticket below.
 - Old Halo (QA instance, until 2026-11-17): `https://dhinternalitsm.itsm.haloqa.co.uk`, auth at `/auth`. Client-credentials auth works. **MCP endpoint (since 2026-11-08): a Halo Virtual Agent, `/api/VirtualAgent/04b2437f-0519-4c8a-8f41-a2a3bbbcb5db/mcp`** (was the generic `/api/mcp`, 22 tools).
 - ngrok static domain: `https://mutiny-seldom-produce.ngrok-free.dev` (= `PUBLIC_URL`; the TwiML App "Halo" points at `/twiml`). The user's ngrok is older: use `--domain=`, or update for `--url=`.
 - Twilio: full (paid) account; API key "API1"; TwiML App "Halo".
 - Demo caller: **Brenda Ross**, `+61 3 9561 7232` (E.164 `+61395617232`, set as `DEMO_CALLER_NUMBER`); has open ticket #3143 (VPN auth failure). Good for the "existing ticket → add note" scenario.
 
-### Halo MCP findings (Virtual Agent endpoint, 12 `CF_` tools)
+### Halo MCP findings: generic `/api/mcp` (current instance, 2026-11-17)
+- Same tool set as the old instance's generic endpoint (which was tested live on 2026-11-08), plus `CF_email_user`. `readOnlyHint` is on the `get_*` tools (except `get_matches`) and `search_tickets`.
+- Policy (`config/tool-policy.json`): `create_ticket` = create_ticket (`user_email, summary ≤70, description, ticket_type` blank); `add_note_to_ticket` = add_note (`ticket_id`; the note is **public**, so promptNotes say to write it for the caller); read-only tools allowed by annotation. Denied: `get_user_info`, `get_assigned_tickets` (API account), `action_ticket` (any action, incl. close), `CF_email_user` (emails + status), `apply_suggestion`, `assign_to_me`, `get_matches` (refresh = write), `log_service_request`, `log_time`.
+- **No close tool here**, so "resolved on call" tickets stay open with a `Resolved on call:` summary (as on the old generic endpoint). Closing would need `action_ticket` restricted to one close action_id: not supported by the policy yet.
+- Caller lookup: `get_users` with `search: {phone}`. On the old instance the search was a substring match on the stored, formatted number ("+61 3 9561 7232"), so `identify.ts` tries spaced AU formats and confirms by normalised E.164.
+- On the old instance: results were `{page_no, page_size, record_count, total_pages, results:[...]}`, ticket URLs `/ticket?id=N`, `search_tickets` worked by name or email, and assets weren't linked to users.
+
+### Halo MCP findings: Virtual Agent endpoint (old instance, 12 `CF_` tools; policy `config/tool-policy.virtual-agent.json`)
 - Annotations: `CF_add_note`, `CF_close_ticket` destructive; `CF_log_incident`, `CF_search_services` not read-only; the rest `readOnlyHint`.
 - Policy: `CF_log_incident` = create_ticket; `CF_add_note` = add_note with `status`/`time_taken` omitted (its `status` enum could change any ticket's status, incl. Closed); `CF_close_ticket` = close_ticket (created-on-this-call only), so "resolved on call" tickets are now really closed; `CF_search_services` = read; `CF_retrieve_users` denied to the agent.
 - `CF_retrieve_users` (no args) returns **every** active user as `[{User, "Phone Number", Email}]` (the user added `Email` to the tool on 2026-11-08; no id). `identify.ts` calls it once and matches on normalised E.164 (`site*` phone fields ignored). The user asked that the agent **not** ask for the email when the lookup has it; it asks only if the match has no email. Kept MCP-only on purpose (a REST fallback was tried and removed).
@@ -72,7 +80,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 1. Terminal 1: `npm run dev` (port 3000). If it fails with `EADDRINUSE`, an old server is still running: stop it (Ctrl+C in its terminal, or `Stop-Process` on the node PIDs). Claude's auto mode isn't allowed to kill processes, so the user does this.
 2. Terminal 2: `ngrok http 3000 --domain=mutiny-seldom-produce.ngrok-free.dev`. A failed call usually means ngrok isn't running (`npm run check:twilio` reports "ngrok endpoint is offline").
 3. Dashboard: `https://mutiny-seldom-produce.ngrok-free.dev/dashboard` (add `?token=` if `DASHBOARD_TOKEN` is set). Ring the number, or use "Call the agent".
-- Calls from the user's own mobile only match a Halo user if that number is on a Halo user returned by `CF_retrieve_users`.
+- Calls from the user's own mobile only match a Halo user if that number is on the user's Halo record (found by `get_users`).
 
 ### Next steps / ideas
 - Tune `src/agent/prompt.ts` / `promptNotes` from real calls (latency, barge-in).

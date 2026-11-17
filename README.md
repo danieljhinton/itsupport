@@ -7,7 +7,7 @@ Ring an Australian number and talk to a Claude-powered agent. During the call it
 - identify the caller from their phone number (or by asking for name and email)
 - look up their **open tickets** and **assets**
 - search the **knowledge base** and walk them through a fix
-- **log a ticket**: closed if the issue was fixed on the call, open with a full summary if not
+- **log a ticket**: closed if the issue was fixed on the call (when the Halo tool set has a close tool), open with a full summary if not
 - **add a note** to an existing ticket instead of creating a duplicate
 
 A live **dashboard** shows the conversation and every Halo MCP call (inputs, results, timings) as it happens. It's built for screen-sharing in customer demos.
@@ -57,6 +57,8 @@ cp .env.example .env
 
    Everything else (updates, other closes, deletes, asset or user edits) is hidden from the agent. Notes are also limited in code to tickets the agent has already looked up, or created, on the current call. `omitArgs` hides risky arguments (for example a `status` field on a note tool) from the agent and strips them before the call.
 
+   Two policies are included: `config/tool-policy.json` for Halo's generic MCP endpoint (`/api/mcp`: `create_ticket`, `add_note_to_ticket`, `get_*`, `search_tickets` ...) and `config/tool-policy.virtual-agent.json` for a Virtual Agent endpoint with the `CF_` tools. Pick one with `HALO_TOOL_POLICY`.
+
    Optionally set `identify.tool` / `identify.args` to the user-search tool, so the caller is looked up by phone number while the greeting plays. Put `{phone}` in the args for a search tool; leave it out for a tool that lists every user (it is called once and filtered by number).
 
 5. Test the agent end to end in your terminal, with no phone needed:
@@ -104,9 +106,9 @@ If you expose the dashboard through ngrok, set `DASHBOARD_TOKEN` and open `/dash
 
 | Scenario | What to say | What the dashboard shows |
 |---|---|---|
-| Fixed on the call | "Outlook keeps asking for my password" | caller matched by phone → KB search → ticket logged, then **closed** |
-| Needs a technician | "My laptop screen is cracked" (asset tag e.g. ABC00008) | asset search → **open ticket** with asset, impact, urgency and category → ticket number read back |
-| Existing ticket | "I'm chasing ticket 3143, the VPN is still broken" | ticket looked up by number → **note added** to it, no duplicate |
+| Fixed on the call | "Outlook keeps asking for my password" | caller matched by phone → KB search → ticket logged as **"Resolved on call"** (closed too, with the Virtual Agent `CF_` tools) |
+| Needs a technician | "My laptop screen is cracked" (asset tag e.g. ABC00008) | asset search → **open ticket** → ticket number read back |
+| Existing ticket | "I'm chasing ticket <number>, the VPN is still broken" (use an open ticket of the demo caller) | ticket looked up by number → **note added** to it, no duplicate |
 | Unknown number | call from a number not in Halo | agent asks for name and email |
 
 Every call starts with the agent's greeting (`WELCOME_GREETING`). A matched caller's email comes from the lookup, so the agent doesn't ask for it.

@@ -5,9 +5,11 @@ import { echoContent, noteAllowed } from "../src/agent/session.js";
 import { contactOf, extractUsers, phoneVariants, toE164 } from "../src/halo/identify.js";
 import { parseRelayMessage } from "../src/twilio/relay.js";
 import { signCallSid, verifyCallSid } from "../src/twilio/twiml.js";
-import policyFile from "../config/tool-policy.json" with { type: "json" };
+import genericPolicyFile from "../config/tool-policy.json" with { type: "json" };
+import policyFile from "../config/tool-policy.virtual-agent.json" with { type: "json" };
 
 const policy = policyFile as unknown as ToolPolicy;
+const genericPolicy = genericPolicyFile as unknown as ToolPolicy;
 const t = (name: string, readOnlyHint?: boolean) => ({
   name,
   annotations: readOnlyHint === undefined ? undefined : { readOnlyHint },
@@ -22,7 +24,48 @@ const haloCatalogue: [string, boolean][] = [
   ["CF_search_tickets", true],
 ];
 
-describe("tool policy", () => {
+// The generic Halo MCP catalogue (name + readOnlyHint) on dhitsminternal.app.usehalo.com, 2026-11-17.
+const genericCatalogue: [string, boolean][] = [
+  ["action_ticket", false], ["add_note_to_ticket", false], ["apply_suggestion", false], ["assign_to_me", false],
+  ["CF_email_user", false], ["create_ticket", false], ["get_assets", true], ["get_assigned_tickets", true],
+  ["get_clients", true], ["get_knowledge", true], ["get_matches", false], ["get_one_article", true],
+  ["get_one_asset", true], ["get_one_client", true], ["get_one_site", true], ["get_one_ticket", true],
+  ["get_one_user", true], ["get_sites", true], ["get_user_info", true], ["get_users", true],
+  ["log_service_request", false], ["log_time", false], ["search_tickets", true],
+];
+
+describe("tool policy (generic Halo MCP, current)", () => {
+  it("exposes exactly the agreed Halo tools", () => {
+    const allowed = Object.fromEntries(
+      genericCatalogue
+        .map(([n, ro]) => [n, classifyTool(t(n, ro), genericPolicy).kind])
+        .filter(([, k]) => k !== "deny"),
+    );
+    expect(allowed).toEqual({
+      add_note_to_ticket: "add_note",
+      create_ticket: "create_ticket",
+      get_assets: "read",
+      get_clients: "read",
+      get_knowledge: "read",
+      get_one_article: "read",
+      get_one_asset: "read",
+      get_one_client: "read",
+      get_one_site: "read",
+      get_one_ticket: "read",
+      get_one_user: "read",
+      get_sites: "read",
+      get_users: "read",
+      search_tickets: "read",
+    });
+    expect(classifyTool(t("add_note_to_ticket", false), genericPolicy)).toEqual({ kind: "add_note", ticketIdArg: "ticket_id" });
+  });
+
+  it("looks the caller up with get_users by phone", () => {
+    expect(genericPolicy.identify).toMatchObject({ tool: "get_users", args: { search: "{phone}" } });
+  });
+});
+
+describe("tool policy (Virtual Agent CF_ tools)", () => {
   it("exposes exactly the agreed Halo tools", () => {
     const allowed = Object.fromEntries(
       haloCatalogue.map(([n, ro]) => [n, classifyTool(t(n, ro), policy).kind]).filter(([, k]) => k !== "deny"),
