@@ -51,7 +51,8 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 18 passing)
 
 ### Environment (user's setup, 2026-11-08)
-- Halo (QA instance): `https://dhinternalitsm.itsm.haloqa.co.uk`, auth at `/auth`. Client-credentials auth works. **MCP endpoint (since 2026-11-08): a Halo Virtual Agent, `/api/VirtualAgent/04b2437f-0519-4c8a-8f41-a2a3bbbcb5db/mcp`** (was the generic `/api/mcp`, 22 tools).
+- **Halo instance changed (2026-11-17) to `https://dhitsminternal.app.usehalo.com`** (auth at `/auth`, assumed). Still to confirm on the new instance: API client credentials, the MCP endpoint (Virtual Agent ID or `/api/mcp`), the tool catalogue (`npm run list-tools` → `config/tool-policy.json`, which is matched to the old `CF_` tools), and the demo caller/ticket below. The notes below are about the old instance until re-checked.
+- Old Halo (QA instance, until 2026-11-17): `https://dhinternalitsm.itsm.haloqa.co.uk`, auth at `/auth`. Client-credentials auth works. **MCP endpoint (since 2026-11-08): a Halo Virtual Agent, `/api/VirtualAgent/04b2437f-0519-4c8a-8f41-a2a3bbbcb5db/mcp`** (was the generic `/api/mcp`, 22 tools).
 - ngrok static domain: `https://mutiny-seldom-produce.ngrok-free.dev` (= `PUBLIC_URL`; the TwiML App "Halo" points at `/twiml`). The user's ngrok is older: use `--domain=`, or update for `--url=`.
 - Twilio: full (paid) account; API key "API1"; TwiML App "Halo".
 - Demo caller: **Brenda Ross**, `+61 3 9561 7232` (E.164 `+61395617232`, set as `DEMO_CALLER_NUMBER`); has open ticket #3143 (VPN auth failure). Good for the "existing ticket → add note" scenario.
