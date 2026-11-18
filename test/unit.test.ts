@@ -60,6 +60,33 @@ describe("tool policy (generic Halo MCP, current)", () => {
     expect(classifyTool(t("add_note_to_ticket", false), genericPolicy)).toEqual({ kind: "add_note", ticketIdArg: "ticket_id" });
   });
 
+  it("keeps action_ticket hidden until the Close action_id is set, then fixes it", () => {
+    expect(classifyTool(t("action_ticket", false), genericPolicy).kind).toBe("deny");
+    const configured = structuredClone(genericPolicy);
+    const rule = configured.rules.find((r) => r.match === "action_ticket")!;
+    rule.fixedArgs = { action_id: 7 };
+    expect(classifyTool(t("action_ticket", false), configured)).toMatchObject({
+      kind: "close_ticket", ticketIdArg: "ticket_id", fixedArgs: { action_id: 7 },
+    });
+    const [tool] = buildAgentTools(
+      [{
+        name: "action_ticket",
+        description: "Perform an action on a ticket.",
+        annotations: { readOnlyHint: false },
+        inputSchema: {
+          type: "object" as const,
+          properties: { ticket_id: { type: "number" }, action_id: { type: "number" } },
+          required: ["ticket_id", "action_id"],
+        },
+      }] as never,
+      configured,
+    );
+    expect(Object.keys(tool.definition.input_schema.properties ?? {})).toEqual(["ticket_id"]);
+    expect(tool.definition.input_schema.required).toEqual(["ticket_id"]);
+    expect(tool.definition.description).toMatch(/^Close a ticket you created on this call/);
+    expect(tool.validate({ ticket_id: 5 })).toBe(true);
+  });
+
   it("looks the caller up with get_users by phone", () => {
     expect(genericPolicy.identify).toMatchObject({ tool: "get_users", args: { search: "{phone}" } });
   });

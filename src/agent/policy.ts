@@ -15,6 +15,13 @@ const policySchema = z.object({
         ticketIdArg: z.string().optional(),
         /** Arguments hidden from Claude and stripped before the call (e.g. a status field on a note tool). */
         omitArgs: z.array(z.string()).optional(),
+        /**
+         * Arguments hidden from Claude and always set to these values (e.g. the one action_id a
+         * generic "action" tool may run). A null value means "not configured yet": the tool is denied.
+         */
+        fixedArgs: z.record(z.string(), z.unknown()).optional(),
+        /** Replaces the MCP tool's own description (e.g. once fixedArgs narrow what it does). */
+        description: z.string().optional(),
       }),
     )
     .default([]),
@@ -33,6 +40,8 @@ export interface Classified {
   kind: ToolKind;
   ticketIdArg?: string;
   omitArgs?: string[];
+  fixedArgs?: Record<string, unknown>;
+  description?: string;
 }
 
 function globToRegExp(glob: string): RegExp {
@@ -44,9 +53,13 @@ function globToRegExp(glob: string): RegExp {
 export function classifyTool(tool: Pick<McpTool, "name" | "annotations">, policy: ToolPolicy): Classified {
   for (const rule of policy.rules) {
     if (globToRegExp(rule.match).test(tool.name)) {
+      const fixed = rule.fixedArgs ?? {};
+      if (Object.values(fixed).some((v) => v === null || v === undefined)) return { kind: "deny" };
       const out: Classified = { kind: rule.kind };
       if (rule.ticketIdArg) out.ticketIdArg = rule.ticketIdArg;
       if (rule.omitArgs?.length) out.omitArgs = rule.omitArgs;
+      if (Object.keys(fixed).length) out.fixedArgs = fixed;
+      if (rule.description) out.description = rule.description;
       return out;
     }
   }

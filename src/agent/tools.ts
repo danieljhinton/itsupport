@@ -81,11 +81,11 @@ export function buildAgentTools(mcpTools: McpTool[], policy: ToolPolicy): AgentT
     if (cls.kind === "deny") continue;
     const schema = omitFromSchema(
       (t.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
-      cls.omitArgs,
+      [...(cls.omitArgs ?? []), ...Object.keys(cls.fixedArgs ?? {})],
     ) as Anthropic.Beta.Messages.BetaTool.InputSchema;
     const definition: Anthropic.Beta.Messages.BetaTool = {
       name: sanitiseName(t.name),
-      description: ((t.description ?? t.title ?? t.name) + (KIND_NOTE[cls.kind] ?? "")).slice(0, 4000),
+      description: ((cls.description ?? t.description ?? t.title ?? t.name) + (KIND_NOTE[cls.kind] ?? "")).slice(0, 4000),
       input_schema: { ...schema, type: "object" },
       eager_input_streaming: true,
     };

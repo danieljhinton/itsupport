@@ -258,6 +258,8 @@ export class CallSession {
     }
     const input = { ...(use.input as Record<string, unknown>) };
     for (const k of tool.policy.omitArgs ?? []) delete input[k];
+    // Fixed args (e.g. the close action's id) always win over anything Claude sent.
+    Object.assign(input, tool.policy.fixedArgs ?? {});
 
     // Local tools
     if (!tool.mcpName) {

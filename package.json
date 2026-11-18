@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "list-tools": "tsx scripts/list-halo-tools.ts",
+    "ticket-actions": "tsx scripts/ticket-actions.ts",
     "chat": "tsx scripts/chat-cli.ts",
     "setup:twilio": "tsx scripts/setup-twilio.ts",
     "check:twilio": "tsx scripts/check-twilio.ts"
