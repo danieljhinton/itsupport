@@ -24,10 +24,10 @@ const haloCatalogue: [string, boolean][] = [
   ["CF_search_tickets", true],
 ];
 
-// The generic Halo MCP catalogue (name + readOnlyHint) on dhitsminternal.app.usehalo.com, 2026-11-17.
+// The Halo /api/mcp catalogue (name + readOnlyHint) on dhitsminternal.app.usehalo.com, 2026-11-18.
 const genericCatalogue: [string, boolean][] = [
   ["action_ticket", false], ["add_note_to_ticket", false], ["apply_suggestion", false], ["assign_to_me", false],
-  ["CF_email_user", false], ["create_ticket", false], ["get_assets", true], ["get_assigned_tickets", true],
+  ["CF_Email_User", false], ["CF_Resolve_Ticket", false], ["CF_User_Details", true], ["create_ticket", false], ["get_assets", true], ["get_assigned_tickets", true],
   ["get_clients", true], ["get_knowledge", true], ["get_matches", false], ["get_one_article", true],
   ["get_one_asset", true], ["get_one_client", true], ["get_one_site", true], ["get_one_ticket", true],
   ["get_one_user", true], ["get_sites", true], ["get_user_info", true], ["get_users", true],
@@ -43,6 +43,7 @@ describe("tool policy (generic Halo MCP, current)", () => {
     );
     expect(allowed).toEqual({
       add_note_to_ticket: "add_note",
+      CF_Resolve_Ticket: "close_ticket",
       create_ticket: "create_ticket",
       get_assets: "read",
       get_clients: "read",
@@ -60,35 +61,38 @@ describe("tool policy (generic Halo MCP, current)", () => {
     expect(classifyTool(t("add_note_to_ticket", false), genericPolicy)).toEqual({ kind: "add_note", ticketIdArg: "ticket_id" });
   });
 
-  it("keeps action_ticket hidden until the Close action_id is set, then fixes it", () => {
-    expect(classifyTool(t("action_ticket", false), genericPolicy).kind).toBe("deny");
-    const configured = structuredClone(genericPolicy);
-    const rule = configured.rules.find((r) => r.match === "action_ticket")!;
-    rule.fixedArgs = { action_id: 7 };
-    expect(classifyTool(t("action_ticket", false), configured)).toMatchObject({
-      kind: "close_ticket", ticketIdArg: "ticket_id", fixedArgs: { action_id: 7 },
+  it("closes with CF_Resolve_Ticket, with the AI options hidden and off", () => {
+    expect(classifyTool(t("CF_Resolve_Ticket", false), genericPolicy)).toEqual({
+      kind: "close_ticket", ticketIdArg: "ticket_id",
+      fixedArgs: { CFAIKBCreationConfirmation: false, CFAIClosureReview: false },
     });
     const [tool] = buildAgentTools(
       [{
-        name: "action_ticket",
-        description: "Perform an action on a ticket.",
-        annotations: { readOnlyHint: false },
+        name: "CF_Resolve_Ticket",
+        description: "Close/Resolve the current ticket",
         inputSchema: {
           type: "object" as const,
-          properties: { ticket_id: { type: "number" }, action_id: { type: "number" } },
-          required: ["ticket_id", "action_id"],
+          properties: {
+            ticket_id: { type: "number" }, note: { type: "string" },
+            CFAIKBCreationConfirmation: { type: "boolean" }, CFAIClosureReview: { type: "boolean" },
+          },
+          required: ["ticket_id", "note"],
         },
       }] as never,
-      configured,
+      genericPolicy,
     );
-    expect(Object.keys(tool.definition.input_schema.properties ?? {})).toEqual(["ticket_id"]);
-    expect(tool.definition.input_schema.required).toEqual(["ticket_id"]);
-    expect(tool.definition.description).toMatch(/^Close a ticket you created on this call/);
-    expect(tool.validate({ ticket_id: 5 })).toBe(true);
+    expect(Object.keys(tool.definition.input_schema.properties ?? {})).toEqual(["ticket_id", "note"]);
+    expect(classifyTool(t("action_ticket", false), genericPolicy).kind).toBe("deny");
+    expect(classifyTool(t("CF_User_Details", true), genericPolicy).kind).toBe("deny");
   });
 
-  it("looks the caller up with get_users by phone", () => {
-    expect(genericPolicy.identify).toMatchObject({ tool: "get_users", args: { search: "{phone}" } });
+  it("treats a null fixed arg as not configured (tool hidden)", () => {
+    const p = { ...genericPolicy, rules: [{ match: "x_tool", kind: "close_ticket" as const, fixedArgs: { action_id: null } }] };
+    expect(classifyTool(t("x_tool", false), p).kind).toBe("deny");
+  });
+
+  it("looks the caller up with the CF_User_Details full list", () => {
+    expect(genericPolicy.identify).toMatchObject({ tool: "CF_User_Details", args: {} });
   });
 });
 
@@ -207,6 +211,7 @@ describe("caller identification helpers", () => {
   it("reads name and email from MCP and REST user shapes", () => {
     expect(contactOf({ User: "Brenda Ross", "Phone Number": "+61 3 9561 7232" })).toEqual({ name: "Brenda Ross", email: undefined });
     expect(contactOf({ name: "Brenda Ross", emailaddress: "b@x.com" })).toEqual({ name: "Brenda Ross", email: "b@x.com" });
+    expect(contactOf({ "Full Name": "Brenda Ross", "Email Address": "b@x.com" })).toEqual({ name: "Brenda Ross", email: "b@x.com" });
   });
 
   it("extracts users from common result shapes", () => {

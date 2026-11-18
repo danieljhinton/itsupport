@@ -45,12 +45,12 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 ## Status / open items
 - [x] Plan approved; scaffold + config
 - [x] Halo auth + MCP client + tool policy, **matched to the real Halo catalogue** and tested live (old instance: generic, then Virtual Agent `CF_` tools)
-- [ ] New instance (2026-11-17): policy matched to its generic `/api/mcp` catalogue; user to run `npm run chat` to check it end to end
+- [ ] New instance (2026-11-17): policy matched to its `/api/mcp` catalogue (incl. CF_Resolve_Ticket / CF_User_Details); user to run `npm run chat` to check lookup, ticket logging and close end to end
 - [x] Agent session + prompt + tools; chat CLI, run end to end on Haiku 5.5. User ran the demo scenarios (incl. ticket logging) and reports it works well
 - [x] Real phone calls to the AU number through ngrok (user confirmed 2026-11-08)
 - [x] Twilio TwiML + relay; browser calling from the dashboard. Twilio creds/API key/TwiML App verified with `npm run check:twilio`; signed webhook through ngrok accepted
 - [x] Dashboard
-- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 21 passing)
+- [x] README, Dockerfile, unit tests (`test/unit.test.ts`, 22 passing)
 
 ### Environment (user's setup, 2026-11-08)
 - **Halo (since 2026-11-17): `https://dhitsminternal.app.usehalo.com`**, auth at `/auth` (client credentials work after a new API application was made; the first attempt failed with `invalid_client`, most likely a truncated secret). MCP endpoint: the **generic `/api/mcp`** (23 tools: the 22 generic ones plus `CF_email_user`), policy `config/tool-policy.json`. Not yet checked live on this instance: caller lookup by phone (`get_users`), `search_tickets`, whether assets are linked to users, `create_ticket` result shape, and the demo caller/ticket below.
@@ -59,11 +59,11 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 - Twilio: full (paid) account; API key "API1"; TwiML App "Halo".
 - Demo caller: **Brenda Ross**, `+61 3 9561 7232` (E.164 `+61395617232`, set as `DEMO_CALLER_NUMBER`); has open ticket #3143 (VPN auth failure). Good for the "existing ticket → add note" scenario.
 
-### Halo MCP findings: generic `/api/mcp` (current instance, 2026-11-17)
-- Same tool set as the old instance's generic endpoint (which was tested live on 2026-11-08), plus `CF_email_user`. `readOnlyHint` is on the `get_*` tools (except `get_matches`) and `search_tickets`.
-- Policy (`config/tool-policy.json`): `create_ticket` = create_ticket (`user_email, summary ≤70, description, ticket_type` blank); `add_note_to_ticket` = add_note (`ticket_id`; the note is **public**, so promptNotes say to write it for the caller); read-only tools allowed by annotation. `action_ticket` = close_ticket with `fixedArgs: {action_id: <Close>}` (hidden from Claude, description overridden, created-on-this-call only). Denied: `get_user_info`, `get_assigned_tickets` (API account), `CF_email_user` (emails + status), `apply_suggestion`, `assign_to_me`, `get_matches` (refresh = write), `log_service_request`, `log_time`.
-- **Closing fixed-on-call tickets: parked (user decision, 2026-11-18): they stay open** with a `Resolved on call:` summary. The code is ready (`action_ticket` with `fixedArgs.action_id`, currently `null` = hidden), but `npm run ticket-actions -- 11` offered only `{id:16, name:"Email User"}`: no Close action for the API agent on that ticket type. To enable it later, make Close available (ticket type allowed actions / action visibility / workflow), rerun the script and set the id. Never use 16 (it emails the user).
-- Caller lookup: `get_users` with `search: {phone}`. On the old instance the search was a substring match on the stored, formatted number ("+61 3 9561 7232"), so `identify.ts` tries spaced AU formats and confirms by normalised E.164.
+### Halo MCP findings: `/api/mcp` (current instance; 25 tools as of 2026-11-18)
+- The generic tools plus the user's custom `CF_Email_User`, `CF_Resolve_Ticket`, `CF_User_Details` (added 2026-11-18). `readOnlyHint` is on the `get_*` tools (except `get_matches`), `search_tickets` and `CF_User_Details`; the write tools have no annotations.
+- Policy (`config/tool-policy.json`): `create_ticket` = create_ticket (`user_email, summary ≤70, description, ticket_type` blank); `add_note_to_ticket` = add_note (`ticket_id`; the note is **public**, so promptNotes say to write it for the caller); `CF_Resolve_Ticket` = close_ticket (`ticket_id`, `note` required; created-on-this-call only; `CFAIKBCreationConfirmation`/`CFAIClosureReview` hidden via `fixedArgs: false`); read-only tools allowed by annotation. Denied: `CF_User_Details` (every user's email/phone; lookup only), `action_ticket` (any action), `CF_Email_User` (emails + `status` enum incl. Closed), `get_user_info`, `get_assigned_tickets` (API account), `apply_suggestion`, `assign_to_me`, `get_matches` (refresh = write), `log_service_request`, `log_time`.
+- **Fixed-on-call tickets are closed again** (2026-11-18) with `CF_Resolve_Ticket`. Its result shape and whether the close works for the API agent are untested. (Before it existed: `action_ticket` offered only `{id:16, "Email User"}` on ticket 11, so the fixedArgs action_id approach was parked; never use 16.)
+- Caller lookup: `CF_User_Details` (no args) called once as a full list and matched on normalised E.164 (`site*` phone keys ignored). Its field names are untested; `contactOf` accepts name/user/full name and email/email address keys. Fallback option: `get_users` with `{search:"{phone}"}` (substring match on the formatted number on the old instance).
 - On the old instance: results were `{page_no, page_size, record_count, total_pages, results:[...]}`, ticket URLs `/ticket?id=N`, `search_tickets` worked by name or email, and assets weren't linked to users.
 
 ### Halo MCP findings: Virtual Agent endpoint (old instance, 12 `CF_` tools; policy `config/tool-policy.virtual-agent.json`)
@@ -81,7 +81,7 @@ A proof-of-concept for **HaloITSM** customers that shows what Halo's MCP server 
 1. Terminal 1: `npm run dev` (port 3000). If it fails with `EADDRINUSE`, an old server is still running: stop it (Ctrl+C in its terminal, or `Stop-Process` on the node PIDs). Claude's auto mode isn't allowed to kill processes, so the user does this.
 2. Terminal 2: `ngrok http 3000 --domain=mutiny-seldom-produce.ngrok-free.dev`. A failed call usually means ngrok isn't running (`npm run check:twilio` reports "ngrok endpoint is offline").
 3. Dashboard: `https://mutiny-seldom-produce.ngrok-free.dev/dashboard` (add `?token=` if `DASHBOARD_TOKEN` is set). Ring the number, or use "Call the agent".
-- Calls from the user's own mobile only match a Halo user if that number is on the user's Halo record (found by `get_users`).
+- Calls from the user's own mobile only match a Halo user if that number is on the user's Halo record (found by `CF_User_Details`).
 
 ### Next steps / ideas
 - Tune `src/agent/prompt.ts` / `promptNotes` from real calls (latency, barge-in).

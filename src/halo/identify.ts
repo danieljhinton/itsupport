@@ -116,7 +116,7 @@ export function contactOf(u: Record<string, unknown>): { name?: string; email?: 
     const hit = Object.entries(u).find(([k, v]) => re.test(k) && typeof v === "string" && v.trim());
     return hit ? (hit[1] as string) : undefined;
   };
-  return { name: pick(/^(name|user|full_?name)$/i), email: pick(/^(email|emailaddress|email_address)$/i) };
+  return { name: pick(/^(name|user|full[ _]?name|user[ _]?name)$/i), email: pick(/^(e-?mail|e-?mail[ _]?address)$/i) };
 }
 
 /** First-turn context note for the model. */
